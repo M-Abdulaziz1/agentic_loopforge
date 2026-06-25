@@ -5,6 +5,7 @@ description = "Generic agent-loop creation and management platform"
 requires-python = ">=3.12"
 dependencies = [
   "fastapi>=0.115,<1.0",
+  "httpx>=0.27,<1.0",
   "pydantic>=2.8,<3.0",
   "uvicorn>=0.30,<1.0",
 ]
@@ -12,7 +13,6 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "pytest>=8.2,<9.0",
-  "httpx>=0.27,<1.0",
 ]
 
 [tool.pytest.ini_options]
