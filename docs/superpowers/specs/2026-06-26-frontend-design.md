@@ -38,13 +38,13 @@ Approved visual reference mockups live in
 - Real-time run monitoring (streamed events, live budget meters, agent status).
 - Human-in-the-loop controls (gate approvals) that present enough context to
   decide.
+- A **visual drag-and-drop loop builder**: edit the generated loop on a React
+  Flow canvas (add/remove/connect agent nodes), configure nodes, validate the
+  graph, and save/instantiate templates.
 - Visual reinforcement of guardrails and honest failure/empty states.
 
 ## Non-goals (this milestone)
 
-- The Phase-3 drag-and-drop loop **builder** (editable React Flow canvas with
-  graph validation and templates). The Run view canvas is read-only/auto-laid-out
-  here; "edit spec" opens form-based editing, not free-form canvas editing.
 - Deep multi-tenant RBAC, org/workspace switching UI.
 - Arabic / RTL layout polish.
 - Model-building screens beyond what Results already accommodates (insights-first;
@@ -60,8 +60,10 @@ Per the project conventions (CLAUDE.md, PRD §5.2):
   invalidation).
 - **Zustand** for UI-only state (selected agent, canvas viewport, panel
   open/closed, theme).
-- **React Flow** for the agent canvas (nodes = agents, edges = handoffs;
-  read-only interactions: pan, zoom, select, fit).
+- **React Flow** for the agent canvas (nodes = agents, edges = handoffs). The Run
+  view uses it read-only (pan, zoom, select, fit); the Loop Builder uses it in
+  editable mode (add/remove/connect nodes, drag, reconnect) with a custom
+  auto-layout for initial placement. Both share the same node/edge components.
 - **SSE (EventSource)** for live run events; a thin client merges events into
   TanStack Query caches and a run-event store.
 - Lives in `/web` per the repo layout.
@@ -114,6 +116,8 @@ Routes (`web/src/routes`):
 /goals/:id/clarify          Clarification
 /specs                      Loop Specs list
 /specs/:id                  Loop Spec preview / approve
+/specs/:id/edit             Loop Builder (editable React Flow canvas)
+/templates                  Loop templates: list / save / instantiate
 /runs                       Runs list
 /runs/:id                   Run view (hero)  [tabs: Canvas | Timeline | Events]
 /gates                      Gate Inbox
@@ -162,13 +166,45 @@ is a two-column layout:
 - **Right rail**: success criteria, failure / honest-empty behavior, approval
   gates, budget, context policy, improvement strategy.
 
-Sticky footer: Reject / Edit spec / **Approve & enable run**. "Edit" opens
-form-based editing of each section (not canvas editing). Approve →
+Sticky footer: Reject / **Edit in builder** / **Approve & enable run**. "Edit in
+builder" opens the Loop Builder (screen 3b); right-rail metadata (criteria,
+gates, budget, policies) is edited via form fields in side panels. Approve →
 `POST /api/loop-specs/:id/approve`.
 
 Maps to `LoopSpec` (`agents`, `tool_permissions`, `handoffs`, `success_criteria`,
 `failure_criteria`, `gates`, `context_policy`, `improvement_strategy`,
 `version`, `status`).
+
+### 3b. Loop Builder (`/specs/:id/edit`)
+
+An editable React Flow canvas for composing/altering a loop, reusing the agent
+node components from the Run view. Capabilities:
+
+- **Node palette**: drag typed nodes onto the canvas (agent, gate). Add, delete,
+  duplicate, and reposition; the initial layout is auto-generated from the
+  generated spec.
+- **Edges = handoffs**: draw/reconnect/delete connections between agent ports.
+- **Node config panel** (right drawer): edit an agent's name, role, system
+  prompt, and tool permissions (toggles, honoring goal-level capability locks so
+  a node can't grant itself internet/sandbox the goal forbids); edit gate type.
+- **Graph validation**: continuous checks surfaced inline — no dangling required
+  inputs, no orphan nodes, exactly one entry, reachable terminal, gate placement
+  rules. The Save/Approve actions are blocked while validation fails, with errors
+  listed.
+- **Templates**: save the current loop as a reusable template; load/instantiate a
+  template into a new spec (see Templates, screen 8).
+
+Editing produces a new `LoopSpec` version via `PATCH /api/loop-specs/:id`
+(or template create). Guardrail note: tool permissions edited here are still
+constrained by the goal's toggles and server-side validation; the client never
+relaxes a guardrail the backend enforces.
+
+### 3c. Loop Templates (`/templates`)
+
+A gallery of saved loop templates (name, description, agent count, tags). Actions:
+preview, instantiate into a new goal/spec, delete. Saving from the builder lands
+here. Maps to a `loop_templates` record (a versioned `LoopSpec` snapshot without a
+bound goal).
 
 ### 4. Run view — hero (`/runs/:id`)
 
@@ -263,7 +299,10 @@ Required additions (built with the UI):
 - `GET  /api/goals/{id}/clarification`,
   `POST /api/goals/{id}/clarification/answers`
 - `GET  /api/loop-specs/{id}`, `GET /api/loop-specs?goal_id=…`,
-  `PATCH /api/loop-specs/{id}` (form edits)
+  `PATCH /api/loop-specs/{id}` (builder + form edits; runs server-side graph
+  validation and rejects guardrail-violating tool permissions)
+- `GET  /api/templates`, `POST /api/templates` (save from builder),
+  `POST /api/templates/{id}/instantiate`, `DELETE /api/templates/{id}`
 - `GET  /api/runs`, `GET /api/runs/{id}`
 - `POST /api/runs/{id}/cancel`, `POST /api/runs/{id}/pause`
 - `GET  /api/gates?status=pending`, `POST /api/gates/{id}/decision`
@@ -290,7 +329,8 @@ together; detailed backend design is out of scope for this frontend spec.
 
 - **Unit (Vitest + React Testing Library)**: design-system primitives; the run
   event reducer (event sequence → derived agent/meter/gate state); form
-  validation (budget bounds, mode/internet locking).
+  validation (budget bounds, mode/internet locking); the loop-graph validator
+  (dangling inputs, orphans, entry/terminal, gate placement) as a pure function.
 - **Component**: each screen renders with mock data across loading / empty /
   error / populated states; gate approve/reject flows; clarity-threshold routing.
 - **Integration**: goal → clarify → spec → approve → run happy path against a
@@ -306,10 +346,12 @@ together; detailed backend design is out of scope for this frontend spec.
 3. Loop Spec preview / approve.
 4. Run view: meter rail + Events tab first, then the React Flow Canvas, then the
    inspector + inline gate, then the Timeline tab.
-5. Gate Inbox.
-6. Results / Report.
-7. Context & Memory.
-8. Polish pass: motion, empty/error states, reduced-motion, accessibility,
+5. Loop Builder (editable canvas + node config + graph validation) and Templates,
+   reusing the Run view's node/edge components.
+6. Gate Inbox.
+7. Results / Report.
+8. Context & Memory.
+9. Polish pass: motion, empty/error states, reduced-motion, accessibility,
    responsive behavior.
 
 Backend endpoints are added just-in-time per screen (see API surface).
