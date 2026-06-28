@@ -173,3 +173,31 @@ First: `git -C ../loopforge-be merge main` (consolidates Plan 2/3), then
 - **2026-06-28 — add Results/Artifacts/Context slice (Plan 5).** Added
   `GET /api/runs/{runId}/artifacts|results|context` and `Artifact`, `InsightResult`,
   `ModelResult`, `Results`, `ContextEntry`, `ContextPack`, `RunContext` schemas.
+
+---
+
+# Codex — next actions (after be/plan-2 Plan 2/3 + infra)
+
+Do these on `be/plan-2`, then ping for the merge. First sync the contract:
+`git merge main` then `git checkout fe/plan-5 -- docs/contract/`.
+
+### 1. Fix gVisor guardrail in `api/loopforge/providers.py` (FR-SEC-1)
+Current code mounts `/workspace` **read-only** (`:ro`), which violates the guardrail
+"read-only root FS, **writable `/workspace` only**", and would block agent code from
+writing artifacts. Change the docker command to:
+- mount the workspace **writable**: `-v {workspace}:/workspace:rw` (keep `-w /workspace`);
+- add **`--cap-drop=ALL`** for extra hardening (alongside the existing `--read-only`,
+  non-root `65532`, `--no-new-privileges`, `--network=none`, tmpfs `/tmp`, mem/cpu caps).
+Update `tests/test_docker_gvisor_provider.py` to assert `/workspace:rw` and `--cap-drop=ALL`.
+(This ports the frontend reviewer's accepted fix; keep your `create_*` runtime naming.)
+
+### 2. Implement Plan 5 endpoints (see brief above)
+`GET /api/runs/{runId}/artifacts | results | context` per `openapi.yaml` — these were not
+implemented in the Plan 2/3 pass.
+
+### 3. Loop Spec "Reject" — STILL pending arbiter; do not implement yet.
+
+- **2026-06-28 — reconcile gVisor (decision: best-of-both).** Adopt Codex's `be/plan-2`
+  provider base; port the writable-`/workspace` + `--cap-drop=ALL` fixes into it (item 1
+  above). The duplicate local WIP (`runtime.py` `build_*`, WIP `providers.py`/tests) is
+  dropped at merge.
