@@ -6,6 +6,9 @@ import { ClarificationPage } from "../pages/ClarificationPage";
 import { LoopSpecPage } from "../pages/LoopSpecPage";
 import { RunPage } from "../pages/RunPage";
 import { GateInboxPage } from "../pages/GateInboxPage";
+import { ResultsPage } from "../pages/ResultsPage";
+import { RunsListPage } from "../pages/RunsListPage";
+import { ContextPage } from "../pages/ContextPage";
 
 export function AppRoutes() {
   return (
@@ -18,11 +21,24 @@ export function AppRoutes() {
         <Route path="/specs" element={<Placeholder title="Loop Specs" />} />
         <Route path="/specs/:specId" element={<LoopSpecPage />} />
         <Route path="/specs/:specId/edit" element={<Placeholder title="Loop Builder" />} />
-        <Route path="/runs" element={<Placeholder title="Runs" />} />
+        <Route
+          path="/runs"
+          element={<RunsListPage title="Runs" to={(id) => `/runs/${id}`} />}
+        />
         <Route path="/runs/:runId" element={<RunPage />} />
+        <Route path="/runs/:runId/results" element={<ResultsPage />} />
+        <Route path="/runs/:runId/context" element={<ContextPage />} />
         <Route path="/gates" element={<GateInboxPage />} />
-        <Route path="/results" element={<Placeholder title="Results" />} />
-        <Route path="/context" element={<Placeholder title="Context & Memory" />} />
+        <Route
+          path="/results"
+          element={<RunsListPage title="Results" to={(id) => `/runs/${id}/results`} />}
+        />
+        <Route
+          path="/context"
+          element={
+            <RunsListPage title="Context & Memory" to={(id) => `/runs/${id}/context`} />
+          }
+        />
         <Route path="/settings" element={<Placeholder title="Settings" />} />
         <Route path="*" element={<Placeholder title="Not found" />} />
       </Route>

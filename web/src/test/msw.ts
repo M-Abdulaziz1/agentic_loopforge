@@ -5,7 +5,9 @@ import {
   sampleGate,
   sampleGoal,
   sampleLoopSpec,
+  sampleResults,
   sampleRun,
+  sampleRunContext,
   sampleRunEvents,
 } from "./fixtures";
 
@@ -51,6 +53,9 @@ export const handlers = [
   http.post("/api/gates/:gateId/decision", () =>
     HttpResponse.json({ ...sampleGate, status: "approved" }),
   ),
+  http.get("/api/runs/:runId/results", () => HttpResponse.json(sampleResults)),
+  http.get("/api/runs/:runId/context", () => HttpResponse.json(sampleRunContext)),
+  http.get("/api/runs/:runId/artifacts", () => HttpResponse.json([])),
 ];
 
 export const server = setupServer(...handlers);

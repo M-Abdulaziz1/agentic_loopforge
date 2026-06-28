@@ -138,6 +138,73 @@ export type Gate = {
 
 export type GateDecision = { decision: "approve" | "reject"; note?: string };
 
+export type Artifact = {
+  id: string;
+  run_id: string;
+  kind: "insight" | "model" | "code" | "plot" | "report";
+  metadata: Record<string, unknown>;
+  storage_ref: string | null;
+  created_at: string;
+};
+
+export type InsightResult = {
+  id: string;
+  rank: number;
+  claim: string;
+  passed: boolean;
+  test: string;
+  p_value: number;
+  effect_name: string;
+  effect_value: number;
+  n: number;
+  correction: string | null;
+  plot_ref: string | null;
+};
+
+export type ModelResult = {
+  id: string;
+  name: string;
+  metric_name: string;
+  metric_value: number;
+  baseline_name: string;
+  baseline_value: number;
+  beats_baseline: boolean;
+  leakage_ok: boolean;
+};
+
+export type Results = {
+  run_id: string;
+  status: RunStatus;
+  summary: {
+    validated: number;
+    rejected: number;
+    cost_usd: number | null;
+    duration_s: number | null;
+  };
+  insights: InsightResult[];
+  models: ModelResult[];
+};
+
+export type ContextEntry = {
+  id: string;
+  run_id: string;
+  kind: string;
+  text: string;
+  tags: string[];
+  source_event_id: string | null;
+  token_count: number;
+  created_at: string;
+};
+
+export type ContextPack = {
+  entries: ContextEntry[];
+  summary: string;
+  token_count: number;
+  overflow: boolean;
+};
+
+export type RunContext = { ledger: ContextEntry[]; pack: ContextPack };
+
 export type LoopSpecUpdate = Partial<
   Pick<
     LoopSpec,
