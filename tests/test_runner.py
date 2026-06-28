@@ -21,7 +21,7 @@ def make_spec(goal_id: str) -> LoopSpec:
     )
 
 
-def test_runner_completes_approved_loop_and_records_events() -> None:
+def test_runner_pauses_at_configured_gate_and_records_contract_events() -> None:
     store = InMemoryStore()
     goal = store.save_goal(Goal(text="Create a release checklist for the CLI"))
     spec = store.save_loop_spec(make_spec(goal.id))
@@ -34,14 +34,12 @@ def test_runner_completes_approved_loop_and_records_events() -> None:
 
     run = runner.start(goal, spec)
 
-    assert run.status == RunStatus.COMPLETED
-    assert run.result_summary == "Loop completed with deterministic fake providers."
+    assert run.status == RunStatus.PENDING_APPROVAL
+    assert store.list_gates(run_id=run.id)[0].status == "pending"
     assert [event.type for event in store.list_events(run.id)] == [
-        "run_started",
-        "context_pack",
-        "agent_step",
-        "review",
-        "run_completed",
+        "node_start",
+        "gate_pending",
+        "run_status",
     ]
 
 
@@ -59,4 +57,4 @@ def test_runner_stops_when_step_budget_is_exhausted() -> None:
     run = runner.start(goal, spec)
 
     assert run.status == RunStatus.BUDGET_EXHAUSTED
-    assert store.list_events(run.id)[-1].type == "budget_exhausted"
+    assert store.list_events(run.id)[-1].type == "run_status"

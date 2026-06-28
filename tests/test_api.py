@@ -14,7 +14,7 @@ def test_goal_creation_returns_clarification_for_vague_goal() -> None:
     assert body["clarification"]["missing_requirements"] == ["desired outcome", "success criteria"]
 
 
-def test_clear_goal_generates_loop_spec_and_run_completes_after_approval() -> None:
+def test_clear_goal_generates_loop_spec_and_starts_run_after_approval() -> None:
     client = TestClient(create_app())
 
     created = client.post(
@@ -34,7 +34,7 @@ def test_clear_goal_generates_loop_spec_and_run_completes_after_approval() -> No
     run_response = client.post(f"/api/goals/{goal_id}/runs", json={"loop_spec_id": spec_id})
     assert run_response.status_code == 201
     run = run_response.json()
-    assert run["status"] == "completed"
+    assert run["status"] == "pending_approval"
 
-    events = client.get(f"/api/runs/{run['id']}/events").json()
-    assert [event["type"] for event in events][-1] == "run_completed"
+    events = client.get(f"/api/runs/{run['id']}/events", headers={"Accept": "application/json"}).json()
+    assert [event["type"] for event in events][-1] == "run_status"

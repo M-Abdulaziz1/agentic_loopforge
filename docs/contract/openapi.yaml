@@ -159,6 +159,154 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
 
+  /api/goals/{goalId}/runs:
+    parameters:
+      - { name: goalId, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: startRun
+      summary: Start a run from an approved loop spec
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RunStartRequest" }
+      responses:
+        "201":
+          description: Run started
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Run" }
+        "409":
+          description: Loop spec not approved
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/runs:
+    get:
+      operationId: listRuns
+      summary: List runs (most recent first)
+      responses:
+        "200":
+          description: Runs
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Run" }
+
+  /api/runs/{runId}:
+    parameters:
+      - { name: runId, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getRun
+      summary: Get a run (status + spend + summary)
+      responses:
+        "200":
+          description: Run
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Run" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/runs/{runId}/cancel:
+    parameters:
+      - { name: runId, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: cancelRun
+      summary: Cancel a running loop (tears down the in-flight sandbox)
+      responses:
+        "200":
+          description: Updated run (status = cancelled)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Run" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/runs/{runId}/pause:
+    parameters:
+      - { name: runId, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: pauseRun
+      summary: Pause a running loop at the next safe boundary
+      responses:
+        "200":
+          description: Updated run
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Run" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/runs/{runId}/events:
+    parameters:
+      - { name: runId, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: streamRunEvents
+      summary: Server-Sent Events stream of run events
+      description: >
+        Returns `text/event-stream`. Each SSE message `data:` is a JSON `RunEvent`.
+        Event `type` is one of: node_start, node_end, tool_call, llm_call, cost_update,
+        gate_pending, run_status. The stream replays existing events (ordered by `seq`)
+        then streams new ones live, and ends when the run reaches a terminal status.
+        For non-streaming clients/tests, the same events are also returned as a JSON array
+        when the request `Accept` header is `application/json`.
+      responses:
+        "200":
+          description: Event stream (or JSON array when Accept is application/json)
+          content:
+            text/event-stream:
+              schema: { type: string }
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/RunEvent" }
+
+  /api/gates:
+    get:
+      operationId: listGates
+      summary: List gates, optionally filtered by status
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [pending, approved, rejected] }
+        - name: run_id
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: Gates
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Gate" }
+
+  /api/gates/{gateId}/decision:
+    parameters:
+      - { name: gateId, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: decideGate
+      summary: Approve or reject a pending HITL gate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GateDecision" }
+      responses:
+        "200":
+          description: Updated gate
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Gate" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Gate already decided
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
 components:
   responses:
     NotFound:
@@ -356,3 +504,69 @@ components:
         gates: { type: array, items: { type: string } }
         context_policy: { type: object, additionalProperties: true }
         improvement_strategy: { type: string }
+
+    RunStartRequest:
+      type: object
+      required: [loop_spec_id]
+      properties:
+        loop_spec_id: { type: string }
+
+    Run:
+      type: object
+      required: [id, goal_id, loop_spec_id, status, spent_steps, spent_llm_calls]
+      properties:
+        id: { type: string }
+        goal_id: { type: string }
+        loop_spec_id: { type: string }
+        status: { $ref: "#/components/schemas/RunStatus" }
+        spent_steps: { type: integer }
+        spent_llm_calls: { type: integer }
+        spent_usd:
+          anyOf: [{ type: number }, { type: "null" }]
+        result_summary:
+          anyOf: [{ type: string }, { type: "null" }]
+        started_at:
+          anyOf: [{ type: string, format: date-time }, { type: "null" }]
+        ended_at:
+          anyOf: [{ type: string, format: date-time }, { type: "null" }]
+
+    RunEvent:
+      type: object
+      required: [id, run_id, seq, type, message, payload, created_at]
+      properties:
+        id: { type: string }
+        run_id: { type: string }
+        seq: { type: integer }
+        type:
+          type: string
+          enum: [node_start, node_end, tool_call, llm_call, cost_update, gate_pending, run_status]
+        message: { type: string }
+        payload:
+          type: object
+          additionalProperties: true
+          description: >
+            Type-specific fields consumed by the UI:
+            node_start/node_end → { agent }; tool_call → { tool, agent? };
+            llm_call → { agent?, tokens?, usd? };
+            cost_update → { spent_usd?, spent_steps?, context_tokens? };
+            gate_pending → { gate_id, gate_type }; run_status → { status }.
+        created_at: { type: string, format: date-time }
+
+    Gate:
+      type: object
+      required: [id, run_id, gate_type, status, context]
+      properties:
+        id: { type: string }
+        run_id: { type: string }
+        gate_type: { type: string }
+        status: { type: string, enum: [pending, approved, rejected] }
+        context: { type: object, additionalProperties: true }
+        note:
+          anyOf: [{ type: string }, { type: "null" }]
+
+    GateDecision:
+      type: object
+      required: [decision]
+      properties:
+        decision: { type: string, enum: [approve, reject] }
+        note: { type: string }

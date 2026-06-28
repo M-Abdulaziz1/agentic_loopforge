@@ -1,20 +1,30 @@
 from __future__ import annotations
 
-from fastapi import FastAPI, HTTPException
+import asyncio
+import json
+
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 
 from api.loopforge.domain import (
     ClarificationAnswer,
     ClarificationResult,
     ClarificationSession,
     ClarificationStatus,
+    Gate,
+    GateDecision,
+    GateStatus,
     Goal,
     GoalCreate,
     GoalCreateResult,
     LoopSpec,
     LoopSpecUpdate,
     Run,
+    RunEvent,
+    RunStartRequest,
     RunStatus,
+    now_utc,
 )
 from api.loopforge.planner import LoopPlanner
 from api.loopforge.providers import FakeLLMProvider, FakeSandboxProvider
@@ -136,21 +146,113 @@ def create_app() -> FastAPI:
         approved = spec.model_copy(update={"status": "approved"})
         return store.save_loop_spec(approved)
 
-    @app.post("/api/goals/{goal_id}/runs", status_code=201)
-    def start_run(goal_id: str, payload: dict[str, str]) -> Run:
+    @app.post("/api/goals/{goalId}/runs", status_code=201)
+    def start_run(goalId: str, payload: RunStartRequest) -> Run:
         try:
-            goal = store.get_goal(goal_id)
-            spec = store.get_loop_spec(payload["loop_spec_id"])
+            goal = store.get_goal(goalId)
+            spec = store.get_loop_spec(payload.loop_spec_id)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="Goal or loop spec not found") from exc
+        if spec.goal_id != goal.id:
+            raise HTTPException(status_code=404, detail="Goal or loop spec not found")
         if spec.status != "approved":
             raise HTTPException(status_code=409, detail="Loop spec must be approved before running")
         runner = LoopRunner(store=store, llm=llm, sandbox=sandbox, tools=tools)
         return runner.start(goal, spec)
 
-    @app.get("/api/runs/{run_id}/events")
-    def list_run_events(run_id: str) -> list[dict[str, object]]:
-        return [event.model_dump(mode="json") for event in store.list_events(run_id)]
+    @app.get("/api/runs")
+    def list_runs() -> list[Run]:
+        return store.list_runs()
+
+    @app.get("/api/runs/{runId}")
+    def get_run(runId: str) -> Run:
+        try:
+            return store.get_run(runId)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Run not found") from exc
+
+    @app.post("/api/runs/{runId}/cancel")
+    def cancel_run(runId: str) -> Run:
+        try:
+            run = store.get_run(runId)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Run not found") from exc
+        cancelled = run.model_copy(update={"status": RunStatus.CANCELLED, "ended_at": now_utc()})
+        store.save_run(cancelled)
+        _append_run_status_event(store, cancelled, "Run cancelled", {"status": cancelled.status})
+        return cancelled
+
+    @app.post("/api/runs/{runId}/pause")
+    def pause_run(runId: str) -> Run:
+        try:
+            run = store.get_run(runId)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Run not found") from exc
+        paused = run.model_copy(update={"status": RunStatus.PENDING_APPROVAL})
+        store.save_run(paused)
+        _append_run_status_event(store, paused, "Run paused", {"status": paused.status, "reason": "paused"})
+        return paused
+
+    @app.get("/api/runs/{runId}/events")
+    def stream_run_events(runId: str, request: Request):
+        try:
+            store.get_run(runId)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Run not found") from exc
+
+        accept = request.headers.get("accept", "")
+        if "application/json" in accept:
+            return [event.model_dump(mode="json") for event in store.list_events(runId)]
+
+        async def event_stream():
+            last_seq = 0
+            while True:
+                events = [event for event in store.list_events(runId) if event.seq > last_seq]
+                for event in events:
+                    last_seq = event.seq
+                    yield f"data: {json.dumps(event.model_dump(mode='json'))}\n\n"
+                run = store.get_run(runId)
+                if _is_terminal(run.status):
+                    break
+                await asyncio.sleep(0.1)
+
+        return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+    @app.get("/api/gates")
+    def list_gates(status: GateStatus | None = None, run_id: str | None = None) -> list[Gate]:
+        return store.list_gates(status=status, run_id=run_id)
+
+    @app.post("/api/gates/{gateId}/decision")
+    def decide_gate(gateId: str, payload: GateDecision) -> Gate:
+        try:
+            gate = store.get_gate(gateId)
+            run = store.get_run(gate.run_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Gate not found") from exc
+        if gate.status != GateStatus.PENDING:
+            raise HTTPException(status_code=409, detail="Gate already decided")
+
+        status = GateStatus.APPROVED if payload.decision == "approve" else GateStatus.REJECTED
+        decided = gate.model_copy(update={"status": status, "note": payload.note})
+        store.save_gate(decided)
+
+        if status == GateStatus.REJECTED:
+            updated_run = run.model_copy(update={"status": RunStatus.CANCELLED, "ended_at": now_utc()})
+            store.save_run(updated_run)
+            _append_run_status_event(store, updated_run, "Gate rejected; run cancelled", {"status": updated_run.status, "gate_id": gate.id})
+            return decided
+
+        if all(existing.status == GateStatus.APPROVED for existing in store.list_gates(run_id=run.id)):
+            completed = run.model_copy(
+                update={
+                    "status": RunStatus.COMPLETED,
+                    "result_summary": "Loop completed after gate approval.",
+                    "ended_at": now_utc(),
+                }
+            )
+            store.save_run(completed)
+            _append_run_status_event(store, completed, "Run completed after gate approval", {"status": completed.status, "gate_id": gate.id})
+        return decided
 
     return app
 
@@ -176,6 +278,29 @@ def _validate_loop_spec(goal: Goal, spec: LoopSpec) -> None:
             raise HTTPException(status_code=422, detail=f"Handoff source agent not found: {source}")
         if target is not None and target not in agent_names:
             raise HTTPException(status_code=422, detail=f"Handoff target agent not found: {target}")
+
+
+def _append_run_status_event(store: InMemoryStore, run: Run, message: str, payload: dict[str, object]) -> RunEvent:
+    return store.append_event(
+        RunEvent(
+            run_id=run.id,
+            seq=0,
+            type="run_status",
+            message=message,
+            payload=payload,
+        )
+    )
+
+
+def _is_terminal(status: RunStatus) -> bool:
+    return status in {
+        RunStatus.COMPLETED,
+        RunStatus.BUDGET_EXHAUSTED,
+        RunStatus.FAILED,
+        RunStatus.CANCELLED,
+        RunStatus.UNSAFE_REQUEST,
+        RunStatus.CONTEXT_OVERFLOW,
+    }
 
 
 app = create_app()

@@ -150,9 +150,14 @@ class Run(BaseModel):
     status: RunStatus = RunStatus.PENDING_APPROVAL
     spent_steps: int = 0
     spent_llm_calls: int = 0
+    spent_usd: float | None = None
     result_summary: str | None = None
     started_at: datetime | None = None
     ended_at: datetime | None = None
+
+
+class RunStartRequest(BaseModel):
+    loop_spec_id: str
 
 
 class RunEvent(BaseModel):
@@ -189,4 +194,9 @@ class Gate(BaseModel):
     gate_type: str
     status: GateStatus = GateStatus.PENDING
     context: dict[str, Any] = Field(default_factory=dict)
+    note: str | None = None
+
+
+class GateDecision(BaseModel):
+    decision: Literal["approve", "reject"]
     note: str | None = None

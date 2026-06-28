@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from api.loopforge.domain import ClarificationSession, ContextEntry, Gate, Goal, LoopSpec, Run, RunEvent
+from api.loopforge.domain import ClarificationSession, ContextEntry, Gate, GateStatus, Goal, LoopSpec, Run, RunEvent
 
 
 class InMemoryStore:
@@ -50,6 +50,13 @@ class InMemoryStore:
     def get_run(self, run_id: str) -> Run:
         return self.runs[run_id]
 
+    def list_runs(self) -> list[Run]:
+        return sorted(
+            self.runs.values(),
+            key=lambda run: run.started_at or run.ended_at or run.id,
+            reverse=True,
+        )
+
     def append_event(self, event: RunEvent) -> RunEvent:
         events = self.events.setdefault(event.run_id, [])
         stored = event.model_copy(update={"seq": len(events) + 1})
@@ -69,3 +76,14 @@ class InMemoryStore:
     def save_gate(self, gate: Gate) -> Gate:
         self.gates[gate.id] = gate
         return gate
+
+    def get_gate(self, gate_id: str) -> Gate:
+        return self.gates[gate_id]
+
+    def list_gates(self, status: GateStatus | None = None, run_id: str | None = None) -> list[Gate]:
+        gates = list(self.gates.values())
+        if status is not None:
+            gates = [gate for gate in gates if gate.status == status]
+        if run_id is not None:
+            gates = [gate for gate in gates if gate.run_id == run_id]
+        return gates
