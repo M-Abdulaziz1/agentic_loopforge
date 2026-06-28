@@ -106,4 +106,40 @@ present) before committing. Commit messages reference FR IDs, e.g.
 
 ## Contract change log
 
-(empty — append entries here when renegotiating)
+- **2026-06-28 — add Run / SSE / Gate slice (Plan 3).** Frontend (consumer) added
+  `POST /api/goals/{goalId}/runs`, `GET /api/runs`, `GET /api/runs/{runId}`,
+  `POST /api/runs/{runId}/cancel`, `POST /api/runs/{runId}/pause`,
+  `GET /api/runs/{runId}/events` (SSE), `GET /api/gates`,
+  `POST /api/gates/{gateId}/decision`, plus `Run`, `RunEvent`, `Gate`, `GateDecision`,
+  `RunStartRequest` schemas. Codex: review and push back before implementing.
+- **OPEN — Loop Spec "Reject".** The Loop Spec screen has a Reject action but there is no
+  reject endpoint. Pending arbiter decision: add `POST /api/loop-specs/{id}/reject` or drop
+  the action. Not in the contract yet.
+
+---
+
+# Codex brief — backend, Plan 3 (Run view: runs + SSE + gates)
+
+Implement the Run/SSE/Gate endpoints now in `openapi.yaml`. Reuse `Run`, `RunEvent`,
+`Gate` from `api/loopforge/domain.py` and the existing `LoopRunner`/`InMemoryStore`.
+
+1. `POST /api/goals/{goalId}/runs` — already exists (`start_run`); align response to the
+   `Run` schema and require the spec to be `approved` (409 otherwise).
+2. `GET /api/runs`, `GET /api/runs/{runId}`.
+3. `POST /api/runs/{runId}/cancel`, `POST /api/runs/{runId}/pause` — update status, tear
+   down the in-flight sandbox on cancel.
+4. `GET /api/runs/{runId}/events` — **turn this into an SSE stream** (`text/event-stream`):
+   replay stored events by `seq`, then stream live ones, end on terminal status. Keep the
+   JSON-array response when `Accept: application/json` (used by tests). Emit the event
+   `type`s and `payload` conventions documented in the contract so the canvas can derive
+   per-agent status, meters, and pending gates.
+5. `GET /api/gates`, `POST /api/gates/{gateId}/decision` — approve/reject a pending gate
+   (409 if already decided); approving resumes the loop, rejecting ends/redirects per gate.
+
+**Guardrails you own:** budget guard is a hard kill switch (force-finalize on cap); a run
+only starts from an `approved` spec; gate decisions are auditable.
+
+**CORS:** allow `http://localhost:5173` so the Vite dev proxy works.
+
+> Frontend syncs this contract into your worktree with:
+> `git -C ../loopforge-be checkout fe/plan-2 -- docs/contract/`
