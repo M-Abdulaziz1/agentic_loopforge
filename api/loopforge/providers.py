@@ -132,6 +132,7 @@ class DockerGvisorSandboxProvider:
             f"--runtime={self.runtime}",
             f"--network={self.network}",
             "--read-only",
+            "--security-opt=no-new-privileges",
             "--tmpfs",
             "/tmp:rw,noexec,nosuid,size=64m",
             "--user",

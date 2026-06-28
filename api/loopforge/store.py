@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from api.loopforge.domain import ClarificationSession, ContextEntry, Gate, GateStatus, Goal, LoopSpec, Run, RunEvent
+from api.loopforge.domain import AuditEvent, ClarificationSession, ContextEntry, Gate, GateStatus, Goal, LoopSpec, Run, RunEvent
 
 
 class Store(Protocol):
@@ -24,6 +24,8 @@ class Store(Protocol):
     def save_gate(self, gate: Gate) -> Gate: ...
     def get_gate(self, gate_id: str) -> Gate: ...
     def list_gates(self, status: GateStatus | None = None, run_id: str | None = None) -> list[Gate]: ...
+    def append_audit_event(self, event: AuditEvent) -> AuditEvent: ...
+    def list_audit_events(self) -> list[AuditEvent]: ...
 
 
 class InMemoryStore:
@@ -35,6 +37,7 @@ class InMemoryStore:
         self.context_entries: dict[str, list[ContextEntry]] = {}
         self.gates: dict[str, Gate] = {}
         self.clarifications_by_goal: dict[str, ClarificationSession] = {}
+        self.audit_events: list[AuditEvent] = []
 
     def save_goal(self, goal: Goal) -> Goal:
         self.goals[goal.id] = goal
@@ -110,3 +113,10 @@ class InMemoryStore:
         if run_id is not None:
             gates = [gate for gate in gates if gate.run_id == run_id]
         return gates
+
+    def append_audit_event(self, event: AuditEvent) -> AuditEvent:
+        self.audit_events.append(event)
+        return event
+
+    def list_audit_events(self) -> list[AuditEvent]:
+        return list(self.audit_events)

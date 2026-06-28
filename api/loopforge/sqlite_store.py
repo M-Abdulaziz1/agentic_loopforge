@@ -7,7 +7,7 @@ from typing import TypeVar
 
 from pydantic import BaseModel
 
-from api.loopforge.domain import ClarificationSession, ContextEntry, Gate, GateStatus, Goal, LoopSpec, Run, RunEvent
+from api.loopforge.domain import AuditEvent, ClarificationSession, ContextEntry, Gate, GateStatus, Goal, LoopSpec, Run, RunEvent
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
 
@@ -108,6 +108,13 @@ class SQLiteStore:
         if status is not None:
             gates = [gate for gate in gates if gate.status == status]
         return gates
+
+    def append_audit_event(self, event: AuditEvent) -> AuditEvent:
+        self._save("audit", event)
+        return event
+
+    def list_audit_events(self) -> list[AuditEvent]:
+        return sorted(self._list("audit", AuditEvent), key=lambda event: event.created_at)
 
     def _save(self, kind: str, model: BaseModel, *, goal_id: str | None = None, run_id: str | None = None) -> None:
         with self._lock:

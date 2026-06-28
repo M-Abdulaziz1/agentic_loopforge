@@ -200,3 +200,12 @@ class Gate(BaseModel):
 class GateDecision(BaseModel):
     decision: Literal["approve", "reject"]
     note: str | None = None
+
+
+class AuditEvent(BaseModel):
+    id: str = Field(default_factory=lambda: new_id("audit"))
+    action: str
+    subject_type: str
+    subject_id: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime = Field(default_factory=now_utc)

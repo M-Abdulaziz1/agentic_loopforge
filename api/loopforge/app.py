@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from api.loopforge.domain import (
+    AuditEvent,
     ClarificationAnswer,
     ClarificationResult,
     ClarificationSession,
@@ -73,9 +74,11 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
         store.save_goal(goal)
         if clarity.session is not None:
             session = store.save_clarification(clarity.session)
+            _audit(store, "goal.create", "goal", goal.id, {"status": goal.status})
             return GoalCreateResult(goal=goal, clarification=session, loop_spec=None)
 
         spec = store.save_loop_spec(planner.generate_spec(goal))
+        _audit(store, "goal.create", "goal", goal.id, {"status": goal.status, "loop_spec_id": spec.id})
         return GoalCreateResult(goal=goal, clarification=None, loop_spec=spec)
 
     @app.get("/api/goals/{goalId}")
@@ -160,7 +163,9 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
         if spec.status != "draft":
             raise HTTPException(status_code=409, detail="Loop spec is not in an approvable state")
         approved = spec.model_copy(update={"status": "approved"})
-        return store.save_loop_spec(approved)
+        approved = store.save_loop_spec(approved)
+        _audit(store, "loop_spec.approve", "loop_spec", spec.id, {"goal_id": spec.goal_id})
+        return approved
 
     @app.post("/api/goals/{goalId}/runs", status_code=201)
     def start_run(goalId: str, payload: RunStartRequest) -> Run:
@@ -174,7 +179,9 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
         if spec.status != "approved":
             raise HTTPException(status_code=409, detail="Loop spec must be approved before running")
         runner = LoopRunner(store=store, llm=llm, sandbox=sandbox, tools=tools)
-        return runner.start(goal, spec)
+        run = runner.start(goal, spec)
+        _audit(store, "run.start", "run", run.id, {"goal_id": goal.id, "loop_spec_id": spec.id, "status": run.status})
+        return run
 
     @app.get("/api/runs")
     def list_runs() -> list[Run]:
@@ -251,6 +258,13 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
         status = GateStatus.APPROVED if payload.decision == "approve" else GateStatus.REJECTED
         decided = gate.model_copy(update={"status": status, "note": payload.note})
         store.save_gate(decided)
+        _audit(
+            store,
+            "gate.decision",
+            "gate",
+            gate.id,
+            {"decision": payload.decision, "note": payload.note, "run_id": gate.run_id},
+        )
 
         if status == GateStatus.REJECTED:
             updated_run = run.model_copy(update={"status": RunStatus.CANCELLED, "ended_at": now_utc()})
@@ -301,6 +315,17 @@ def _append_run_status_event(store: Store, run: Run, message: str, payload: dict
             seq=0,
             type="run_status",
             message=message,
+            payload=payload,
+        )
+    )
+
+
+def _audit(store: Store, action: str, subject_type: str, subject_id: str, payload: dict[str, object]) -> AuditEvent:
+    return store.append_audit_event(
+        AuditEvent(
+            action=action,
+            subject_type=subject_type,
+            subject_id=subject_id,
             payload=payload,
         )
     )
