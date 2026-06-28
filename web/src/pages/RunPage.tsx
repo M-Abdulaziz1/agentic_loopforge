@@ -4,9 +4,11 @@ import { useUiStore } from "../store/ui";
 import { useCancelRun, usePauseRun, useRun, useRunEvents } from "../lib/api/runs";
 import { useLoopSpec } from "../lib/api/loopspecs";
 import { useGoal } from "../lib/api/goals";
+import { useGates, useDecideGate } from "../lib/api/gates";
 import { reduceRunEvents } from "../lib/runEvents";
 import { MeterBar } from "../components/ui/MeterBar";
 import { AgentCanvas } from "../components/run/AgentCanvas";
+import { Inspector } from "../components/run/Inspector";
 import type { RunEvent, RunEventType } from "../lib/api/types";
 
 const TABS = ["canvas", "timeline", "events"] as const;
@@ -22,13 +24,28 @@ export function RunPage() {
   const { data: spec } = useLoopSpec(run?.loop_spec_id ?? "");
   const { data: goal } = useGoal(run?.goal_id ?? "");
   const { data: events = [] } = useRunEvents(runId, run?.status === "running");
-
-  if (isLoading || !run) return <div className="p-8 text-mut">Loading run…</div>;
+  const { data: pendingGates = [] } = useGates("pending");
 
   const agentNames = spec?.agents.map((a) => a.name) ?? [];
   const view = reduceRunEvents(events, agentNames);
+  const gate =
+    pendingGates.find((g) => g.id === view.pendingGate?.gateId) ??
+    pendingGates.find((g) => g.run_id === runId);
+  const decide = useDecideGate(view.pendingGate?.gateId ?? gate?.id ?? "", runId);
+
+  if (isLoading || !run) return <div className="p-8 text-mut">Loading run…</div>;
+
   const budget = goal?.budget;
   const isLive = run.status === "running";
+  const selectedAgent = spec?.agents.find((a) => a.name === selectedAgentId);
+  const incoming =
+    spec?.handoffs.filter((h) => h.to === selectedAgentId).map((h) => h.from) ?? [];
+  const outgoing =
+    spec?.handoffs.filter((h) => h.from === selectedAgentId).map((h) => h.to) ?? [];
+  const recent = selectedAgentId ? (view.eventsByAgent[selectedAgentId] ?? []) : [];
+  const inspectorGate = view.pendingGate
+    ? { gateType: view.pendingGate.gateType, context: gate?.context ?? {} }
+    : null;
 
   return (
     <div className="flex min-h-screen flex-col overflow-hidden">
@@ -110,16 +127,17 @@ export function RunPage() {
             <div className="grid h-full place-items-center text-mut">Timeline — coming next</div>
           )}
         </div>
-        <aside className="overflow-auto border-l border-[var(--line)] p-5">
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-mut">
-            Inspector
-          </h3>
-          <p className="text-[13px] leading-relaxed text-ink2">
-            {view.pendingGate
-              ? `Gate pending · ${view.pendingGate.gateType}`
-              : "Select an agent on the canvas to inspect it."}
-          </p>
-        </aside>
+        <Inspector
+          agent={selectedAgent}
+          agentStatus={selectedAgent ? view.agentStatus[selectedAgent.name] : undefined}
+          incoming={incoming}
+          outgoing={outgoing}
+          recent={recent}
+          gate={inspectorGate}
+          deciding={decide.isPending}
+          onApprove={() => decide.mutate({ decision: "approve" })}
+          onReject={() => decide.mutate({ decision: "reject" })}
+        />
       </div>
     </div>
   );
