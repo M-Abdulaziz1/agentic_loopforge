@@ -95,6 +95,49 @@ export type ClarificationResult = {
   loop_spec: LoopSpec | null;
 };
 
+export type Run = {
+  id: string;
+  goal_id: string;
+  loop_spec_id: string;
+  status: RunStatus;
+  spent_steps: number;
+  spent_llm_calls: number;
+  spent_usd: number | null;
+  result_summary: string | null;
+  started_at: string | null;
+  ended_at: string | null;
+};
+
+export type RunEventType =
+  | "node_start"
+  | "node_end"
+  | "tool_call"
+  | "llm_call"
+  | "cost_update"
+  | "gate_pending"
+  | "run_status";
+
+export type RunEvent = {
+  id: string;
+  run_id: string;
+  seq: number;
+  type: RunEventType;
+  message: string;
+  payload: Record<string, unknown>;
+  created_at: string;
+};
+
+export type Gate = {
+  id: string;
+  run_id: string;
+  gate_type: string;
+  status: "pending" | "approved" | "rejected";
+  context: Record<string, unknown>;
+  note: string | null;
+};
+
+export type GateDecision = { decision: "approve" | "reject"; note?: string };
+
 export type LoopSpecUpdate = Partial<
   Pick<
     LoopSpec,

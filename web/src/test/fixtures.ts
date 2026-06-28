@@ -1,8 +1,11 @@
 // Contract-conformant sample data (docs/contract/openapi.yaml) for MSW + dev.
 import type {
   ClarificationSession,
+  Gate,
   Goal,
   LoopSpec,
+  Run,
+  RunEvent,
 } from "../lib/api/types";
 
 export const sampleGoal: Goal = {
@@ -88,4 +91,53 @@ export const sampleLoopSpec: LoopSpec = {
     "If < 3 validated insights, route analyst → validator once more within budget.",
   status: "draft",
   created_at: "2026-06-27T12:03:30Z",
+};
+
+export const sampleRun: Run = {
+  id: "run_a91c",
+  goal_id: "goal_churn_q2",
+  loop_spec_id: "spec_churn_v1",
+  status: "running",
+  spent_steps: 5,
+  spent_llm_calls: 8,
+  spent_usd: 0.42,
+  result_summary: null,
+  started_at: "2026-06-27T12:03:00Z",
+  ended_at: null,
+};
+
+const evt = (
+  seq: number,
+  type: RunEvent["type"],
+  message: string,
+  payload: Record<string, unknown>,
+): RunEvent => ({
+  id: `evt_${seq}`,
+  run_id: "run_a91c",
+  seq,
+  type,
+  message,
+  payload,
+  created_at: "2026-06-27T12:04:00Z",
+});
+
+export const sampleRunEvents: RunEvent[] = [
+  evt(1, "node_start", "Entered planner", { agent: "planner" }),
+  evt(2, "node_end", "planner done", { agent: "planner" }),
+  evt(3, "node_start", "Entered analyst", { agent: "analyst" }),
+  evt(4, "tool_call", "sandbox.exec profiling", { tool: "sandbox.exec", agent: "analyst" }),
+  evt(5, "cost_update", "cost", { spent_usd: 0.42, spent_steps: 5, context_tokens: 3100 }),
+  evt(6, "gate_pending", "gate before_finalize", {
+    gate_id: "gate_1",
+    gate_type: "before_finalize",
+  }),
+];
+
+export const sampleGate: Gate = {
+  id: "gate_1",
+  run_id: "run_a91c",
+  gate_type: "before_finalize",
+  status: "pending",
+  context: { est_cost_usd: 0.08, validated_insights: 3 },
+  note: null,
 };

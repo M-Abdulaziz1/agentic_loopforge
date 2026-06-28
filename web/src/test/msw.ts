@@ -1,6 +1,13 @@
 import { setupServer } from "msw/node";
 import { http, HttpResponse } from "msw";
-import { sampleClarification, sampleGoal, sampleLoopSpec } from "./fixtures";
+import {
+  sampleClarification,
+  sampleGate,
+  sampleGoal,
+  sampleLoopSpec,
+  sampleRun,
+  sampleRunEvents,
+} from "./fixtures";
 
 // Default handlers conform to docs/contract/openapi.yaml. Individual tests override
 // with server.use(...) for specific scenarios.
@@ -29,6 +36,20 @@ export const handlers = [
   ),
   http.post("/api/loop-specs/:specId/approve", () =>
     HttpResponse.json({ ...sampleLoopSpec, status: "approved" }),
+  ),
+  http.post("/api/goals/:goalId/runs", () =>
+    HttpResponse.json(sampleRun, { status: 201 }),
+  ),
+  http.get("/api/runs", () => HttpResponse.json([sampleRun])),
+  http.get("/api/runs/:runId", () => HttpResponse.json(sampleRun)),
+  http.post("/api/runs/:runId/cancel", () =>
+    HttpResponse.json({ ...sampleRun, status: "cancelled" }),
+  ),
+  http.post("/api/runs/:runId/pause", () => HttpResponse.json(sampleRun)),
+  http.get("/api/runs/:runId/events", () => HttpResponse.json(sampleRunEvents)),
+  http.get("/api/gates", () => HttpResponse.json([sampleGate])),
+  http.post("/api/gates/:gateId/decision", () =>
+    HttpResponse.json({ ...sampleGate, status: "approved" }),
   ),
 ];
 
