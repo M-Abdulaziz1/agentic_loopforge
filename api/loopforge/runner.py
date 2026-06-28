@@ -3,7 +3,7 @@ from __future__ import annotations
 from api.loopforge.context import ContextManager
 from api.loopforge.domain import ContextEntry, Gate, Goal, LoopSpec, Run, RunEvent, RunStatus, now_utc
 from api.loopforge.providers import LLMProvider, SandboxProvider
-from api.loopforge.store import InMemoryStore
+from api.loopforge.store import Store
 from api.loopforge.tools import ToolRegistry
 
 
@@ -11,7 +11,7 @@ class LoopRunner:
     def __init__(
         self,
         *,
-        store: InMemoryStore,
+        store: Store,
         llm: LLMProvider,
         sandbox: SandboxProvider,
         tools: ToolRegistry,

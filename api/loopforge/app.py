@@ -29,11 +29,17 @@ from api.loopforge.domain import (
 from api.loopforge.planner import LoopPlanner
 from api.loopforge.providers import FakeLLMProvider, FakeSandboxProvider
 from api.loopforge.runner import LoopRunner
-from api.loopforge.store import InMemoryStore
+from api.loopforge.settings import Settings
+from api.loopforge.sqlite_store import SQLiteStore
+from api.loopforge.store import InMemoryStore, Store
 from api.loopforge.tools import default_tool_registry
 
 
-def create_app() -> FastAPI:
+def create_store(settings: Settings) -> Store:
+    return SQLiteStore(settings.storage_path)
+
+
+def create_app(store: Store | None = None) -> FastAPI:
     app = FastAPI(title="LoopForge")
     app.add_middleware(
         CORSMiddleware,
@@ -42,7 +48,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    store = InMemoryStore()
+    store = store or InMemoryStore()
     llm = FakeLLMProvider()
     planner = LoopPlanner(llm=llm)
     sandbox = FakeSandboxProvider()
@@ -283,7 +289,7 @@ def _validate_loop_spec(goal: Goal, spec: LoopSpec) -> None:
             raise HTTPException(status_code=422, detail=f"Handoff target agent not found: {target}")
 
 
-def _append_run_status_event(store: InMemoryStore, run: Run, message: str, payload: dict[str, object]) -> RunEvent:
+def _append_run_status_event(store: Store, run: Run, message: str, payload: dict[str, object]) -> RunEvent:
     return store.append_event(
         RunEvent(
             run_id=run.id,
@@ -306,4 +312,4 @@ def _is_terminal(status: RunStatus) -> bool:
     }
 
 
-app = create_app()
+app = create_app(store=create_store(Settings.from_env()))
