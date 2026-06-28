@@ -4,6 +4,7 @@ import { Placeholder } from "../pages/Placeholder";
 import { GoalCreatePage } from "../pages/GoalCreatePage";
 import { ClarificationPage } from "../pages/ClarificationPage";
 import { LoopSpecPage } from "../pages/LoopSpecPage";
+import { RunPage } from "../pages/RunPage";
 
 export function AppRoutes() {
   return (
@@ -17,6 +18,7 @@ export function AppRoutes() {
         <Route path="/specs/:specId" element={<LoopSpecPage />} />
         <Route path="/specs/:specId/edit" element={<Placeholder title="Loop Builder" />} />
         <Route path="/runs" element={<Placeholder title="Runs" />} />
+        <Route path="/runs/:runId" element={<RunPage />} />
         <Route path="/gates" element={<Placeholder title="Gate Inbox" />} />
         <Route path="/results" element={<Placeholder title="Results" />} />
         <Route path="/context" element={<Placeholder title="Context & Memory" />} />
