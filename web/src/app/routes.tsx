@@ -3,6 +3,7 @@ import { AppLayout } from "../components/shell/AppLayout";
 import { Placeholder } from "../pages/Placeholder";
 import { GoalCreatePage } from "../pages/GoalCreatePage";
 import { ClarificationPage } from "../pages/ClarificationPage";
+import { LoopSpecPage } from "../pages/LoopSpecPage";
 
 export function AppRoutes() {
   return (
@@ -13,6 +14,8 @@ export function AppRoutes() {
         <Route path="/goals/new" element={<GoalCreatePage />} />
         <Route path="/goals/:goalId/clarify" element={<ClarificationPage />} />
         <Route path="/specs" element={<Placeholder title="Loop Specs" />} />
+        <Route path="/specs/:specId" element={<LoopSpecPage />} />
+        <Route path="/specs/:specId/edit" element={<Placeholder title="Loop Builder" />} />
         <Route path="/runs" element={<Placeholder title="Runs" />} />
         <Route path="/gates" element={<Placeholder title="Gate Inbox" />} />
         <Route path="/results" element={<Placeholder title="Results" />} />
