@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppLayout } from "../components/shell/AppLayout";
 import { Placeholder } from "../pages/Placeholder";
+import { GoalCreatePage } from "../pages/GoalCreatePage";
 
 export function AppRoutes() {
   return (
@@ -8,7 +9,7 @@ export function AppRoutes() {
       <Route element={<AppLayout />}>
         <Route index element={<Navigate to="/goals" replace />} />
         <Route path="/goals" element={<Placeholder title="Goals" />} />
-        <Route path="/goals/new" element={<Placeholder title="New Goal" />} />
+        <Route path="/goals/new" element={<GoalCreatePage />} />
         <Route path="/specs" element={<Placeholder title="Loop Specs" />} />
         <Route path="/runs" element={<Placeholder title="Runs" />} />
         <Route path="/gates" element={<Placeholder title="Gate Inbox" />} />
