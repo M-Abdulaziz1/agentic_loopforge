@@ -188,6 +188,60 @@ class ContextPack(BaseModel):
     overflow: bool = False
 
 
+class Artifact(BaseModel):
+    id: str = Field(default_factory=lambda: new_id("artifact"))
+    run_id: str
+    kind: Literal["insight", "model", "code", "plot", "report"]
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    storage_ref: str | None = None
+    created_at: datetime = Field(default_factory=now_utc)
+
+
+class InsightResult(BaseModel):
+    id: str
+    rank: int
+    claim: str
+    passed: bool
+    test: str
+    p_value: float
+    effect_name: str
+    effect_value: float
+    n: int
+    correction: str | None = None
+    plot_ref: str | None = None
+
+
+class ModelResult(BaseModel):
+    id: str
+    name: str
+    metric_name: str
+    metric_value: float
+    baseline_name: str
+    baseline_value: float
+    beats_baseline: bool
+    leakage_ok: bool
+
+
+class ResultsSummary(BaseModel):
+    validated: int
+    rejected: int
+    cost_usd: float | None = None
+    duration_s: float | None = None
+
+
+class Results(BaseModel):
+    run_id: str
+    status: RunStatus
+    summary: ResultsSummary
+    insights: list[InsightResult] = Field(default_factory=list)
+    models: list[ModelResult] = Field(default_factory=list)
+
+
+class RunContext(BaseModel):
+    ledger: list[ContextEntry]
+    pack: ContextPack
+
+
 class Gate(BaseModel):
     id: str = Field(default_factory=lambda: new_id("gate"))
     run_id: str

@@ -7,7 +7,7 @@ from typing import TypeVar
 
 from pydantic import BaseModel
 
-from api.loopforge.domain import AuditEvent, ClarificationSession, ContextEntry, Gate, GateStatus, Goal, LoopSpec, Run, RunEvent
+from api.loopforge.domain import Artifact, AuditEvent, ClarificationSession, ContextEntry, Gate, GateStatus, Goal, LoopSpec, Run, RunEvent
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
 
@@ -88,6 +88,13 @@ class SQLiteStore:
 
     def list_events(self, run_id: str) -> list[RunEvent]:
         return sorted(self._list("event", RunEvent, run_id=run_id), key=lambda event: event.seq)
+
+    def save_artifact(self, artifact: Artifact) -> Artifact:
+        self._save("artifact", artifact, run_id=artifact.run_id)
+        return artifact
+
+    def list_artifacts(self, run_id: str) -> list[Artifact]:
+        return sorted(self._list("artifact", Artifact, run_id=run_id), key=lambda artifact: artifact.created_at)
 
     def append_context(self, entry: ContextEntry) -> ContextEntry:
         self._save("context", entry, run_id=entry.run_id)

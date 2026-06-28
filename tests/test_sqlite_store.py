@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 
 from api.loopforge.app import create_app, create_store
 from api.loopforge.domain import (
+    Artifact,
     ClarificationQuestion,
     ClarificationSession,
     Gate,
@@ -41,6 +42,7 @@ def test_sqlite_store_persists_entities_after_reopen(tmp_path) -> None:
     )
     run = store.save_run(Run(goal_id=goal.id, loop_spec_id=spec.id))
     event = store.append_event(RunEvent(run_id=run.id, seq=0, type="run_status", message="Started"))
+    artifact = store.save_artifact(Artifact(run_id=run.id, kind="report", metadata={"summary": "Report ready"}))
     gate = store.save_gate(Gate(run_id=run.id, gate_type="before_run"))
 
     reopened = SQLiteStore(db_path)
@@ -50,6 +52,7 @@ def test_sqlite_store_persists_entities_after_reopen(tmp_path) -> None:
     assert reopened.list_loop_specs(goal_id=goal.id)[0].id == spec.id
     assert reopened.get_run(run.id).loop_spec_id == spec.id
     assert reopened.list_events(run.id)[0].id == event.id
+    assert reopened.list_artifacts(run.id)[0].id == artifact.id
     assert reopened.get_gate(gate.id).run_id == run.id
 
 

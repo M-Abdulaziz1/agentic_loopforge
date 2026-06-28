@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import sqlite3
 
 from fastapi import FastAPI, HTTPException, Request
@@ -9,25 +10,34 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from api.loopforge.domain import (
+    Artifact,
     AuditEvent,
     ClarificationAnswer,
     ClarificationResult,
     ClarificationSession,
     ClarificationStatus,
+    ContextEntry,
+    ContextPack,
     Gate,
     GateDecision,
     GateStatus,
     Goal,
     GoalCreate,
     GoalCreateResult,
+    InsightResult,
     LoopSpec,
     LoopSpecUpdate,
+    ModelResult,
+    Results,
+    ResultsSummary,
     Run,
+    RunContext,
     RunEvent,
     RunStartRequest,
     RunStatus,
     now_utc,
 )
+from api.loopforge.context import ContextManager
 from api.loopforge.planner import LoopPlanner
 from api.loopforge.runner import LoopRunner
 from api.loopforge.runtime import create_llm_provider, create_sandbox_provider
@@ -241,6 +251,40 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
 
         return StreamingResponse(event_stream(), media_type="text/event-stream")
 
+    @app.get("/api/runs/{runId}/artifacts")
+    def list_artifacts(runId: str) -> list[Artifact]:
+        try:
+            store.get_run(runId)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Run not found") from exc
+        return [_sanitize_artifact(artifact) for artifact in store.list_artifacts(runId)]
+
+    @app.get("/api/runs/{runId}/results")
+    def get_results(runId: str) -> Results:
+        try:
+            run = store.get_run(runId)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Run not found") from exc
+        return _assemble_results(run, store.list_artifacts(runId))
+
+    @app.get("/api/runs/{runId}/context")
+    def get_run_context(runId: str) -> RunContext:
+        try:
+            run = store.get_run(runId)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Run not found") from exc
+        ledger = store.list_context(runId)
+        max_tokens = 8000
+        try:
+            max_tokens = store.get_goal(run.goal_id).budget.max_context_tokens
+        except KeyError:
+            pass
+        pack = ContextManager(max_tokens=max_tokens).build_pack(ledger, task="inspect run context", required_tags=["required"])
+        return RunContext(
+            ledger=[_sanitize_context_entry(entry) for entry in ledger],
+            pack=_sanitize_context_pack(pack),
+        )
+
     @app.get("/api/gates")
     def list_gates(status: GateStatus | None = None, run_id: str | None = None) -> list[Gate]:
         return store.list_gates(status=status, run_id=run_id)
@@ -329,6 +373,93 @@ def _audit(store: Store, action: str, subject_type: str, subject_id: str, payloa
             payload=payload,
         )
     )
+
+
+def _assemble_results(run: Run, artifacts: list[Artifact]) -> Results:
+    insights: list[InsightResult] = []
+    models: list[ModelResult] = []
+    rejected = 0
+
+    for artifact in artifacts:
+        metadata = _sanitize_value(artifact.metadata)
+        if artifact.kind == "insight":
+            if bool(metadata.get("passed")):
+                insights.append(
+                    InsightResult(
+                        id=artifact.id,
+                        rank=len(insights) + 1,
+                        claim=str(metadata["claim"]),
+                        passed=True,
+                        test=str(metadata["test"]),
+                        p_value=float(metadata["p_value"]),
+                        effect_name=str(metadata["effect_name"]),
+                        effect_value=float(metadata["effect_value"]),
+                        n=int(metadata["n"]),
+                        correction=metadata.get("correction"),
+                        plot_ref=metadata.get("plot_ref"),
+                    )
+                )
+            else:
+                rejected += 1
+        elif artifact.kind == "model":
+            if bool(metadata.get("beats_baseline")) and bool(metadata.get("leakage_ok")):
+                models.append(
+                    ModelResult(
+                        id=artifact.id,
+                        name=str(metadata["name"]),
+                        metric_name=str(metadata["metric_name"]),
+                        metric_value=float(metadata["metric_value"]),
+                        baseline_name=str(metadata["baseline_name"]),
+                        baseline_value=float(metadata["baseline_value"]),
+                        beats_baseline=True,
+                        leakage_ok=True,
+                    )
+                )
+            else:
+                rejected += 1
+
+    duration_s = None
+    if run.started_at is not None and run.ended_at is not None:
+        duration_s = (run.ended_at - run.started_at).total_seconds()
+    return Results(
+        run_id=run.id,
+        status=run.status,
+        summary=ResultsSummary(
+            validated=len(insights) + len(models),
+            rejected=rejected,
+            cost_usd=run.spent_usd,
+            duration_s=duration_s,
+        ),
+        insights=insights,
+        models=models,
+    )
+
+
+def _sanitize_artifact(artifact: Artifact) -> Artifact:
+    return artifact.model_copy(update={"metadata": _sanitize_value(artifact.metadata)})
+
+
+def _sanitize_context_pack(pack: ContextPack) -> ContextPack:
+    return pack.model_copy(update={"entries": [_sanitize_context_entry(entry) for entry in pack.entries], "summary": _sanitize_text(pack.summary)})
+
+
+def _sanitize_context_entry(entry: ContextEntry) -> ContextEntry:
+    return entry.model_copy(update={"text": _sanitize_text(entry.text)})
+
+
+def _sanitize_value(value):
+    if isinstance(value, str):
+        return _sanitize_text(value)
+    if isinstance(value, list):
+        return [_sanitize_value(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _sanitize_value(item) for key, item in value.items()}
+    return value
+
+
+def _sanitize_text(text: str) -> str:
+    text = re.sub(r"\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b", "[REDACTED_EMAIL]", text)
+    return re.sub(r"\b\d{3}-\d{2}-\d{4}\b", "[REDACTED_SSN]", text)
 
 
 def _is_terminal(status: RunStatus) -> bool:

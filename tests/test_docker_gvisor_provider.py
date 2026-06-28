@@ -34,8 +34,10 @@ def test_docker_gvisor_provider_builds_constrained_docker_command(tmp_path) -> N
     assert "--network=none" in command
     assert "--read-only" in command
     assert "--security-opt=no-new-privileges" in command
+    assert "--cap-drop=ALL" in command
     assert "--memory=256m" in command
     assert "--cpus=0.5" in command
+    assert any(mount.endswith(":/workspace:rw") for mount in command)
     assert "python:3.12-slim" in command
 
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from api.loopforge.domain import AuditEvent, ClarificationSession, ContextEntry, Gate, GateStatus, Goal, LoopSpec, Run, RunEvent
+from api.loopforge.domain import Artifact, AuditEvent, ClarificationSession, ContextEntry, Gate, GateStatus, Goal, LoopSpec, Run, RunEvent
 
 
 class Store(Protocol):
@@ -19,6 +19,8 @@ class Store(Protocol):
     def list_runs(self) -> list[Run]: ...
     def append_event(self, event: RunEvent) -> RunEvent: ...
     def list_events(self, run_id: str) -> list[RunEvent]: ...
+    def save_artifact(self, artifact: Artifact) -> Artifact: ...
+    def list_artifacts(self, run_id: str) -> list[Artifact]: ...
     def append_context(self, entry: ContextEntry) -> ContextEntry: ...
     def list_context(self, run_id: str) -> list[ContextEntry]: ...
     def save_gate(self, gate: Gate) -> Gate: ...
@@ -34,6 +36,7 @@ class InMemoryStore:
         self.loop_specs: dict[str, LoopSpec] = {}
         self.runs: dict[str, Run] = {}
         self.events: dict[str, list[RunEvent]] = {}
+        self.artifacts: dict[str, list[Artifact]] = {}
         self.context_entries: dict[str, list[ContextEntry]] = {}
         self.gates: dict[str, Gate] = {}
         self.clarifications_by_goal: dict[str, ClarificationSession] = {}
@@ -91,6 +94,18 @@ class InMemoryStore:
 
     def list_events(self, run_id: str) -> list[RunEvent]:
         return list(self.events.get(run_id, []))
+
+    def save_artifact(self, artifact: Artifact) -> Artifact:
+        artifacts = self.artifacts.setdefault(artifact.run_id, [])
+        existing_index = next((index for index, existing in enumerate(artifacts) if existing.id == artifact.id), None)
+        if existing_index is None:
+            artifacts.append(artifact)
+        else:
+            artifacts[existing_index] = artifact
+        return artifact
+
+    def list_artifacts(self, run_id: str) -> list[Artifact]:
+        return list(self.artifacts.get(run_id, []))
 
     def append_context(self, entry: ContextEntry) -> ContextEntry:
         self.context_entries.setdefault(entry.run_id, []).append(entry)
