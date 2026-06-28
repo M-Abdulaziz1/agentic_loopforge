@@ -40,6 +40,11 @@ class GateStatus(StrEnum):
     REJECTED = "rejected"
 
 
+class ClarificationStatus(StrEnum):
+    OPEN = "open"
+    READY = "ready"
+
+
 class GoalToggles(BaseModel):
     internet: bool = False
     code_sandbox: bool = True
@@ -79,6 +84,12 @@ class ClarificationSession(BaseModel):
     answers: list[dict[str, str]] = Field(default_factory=list)
     missing_requirements: list[str] = Field(default_factory=list)
     clarity_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    status: ClarificationStatus = ClarificationStatus.OPEN
+
+
+class ClarificationAnswer(BaseModel):
+    question_id: str
+    answer: str
 
 
 class ToolPermission(BaseModel):
@@ -108,6 +119,28 @@ class LoopSpec(BaseModel):
     improvement_strategy: str
     status: Literal["draft", "approved", "rejected"] = "draft"
     created_at: datetime = Field(default_factory=now_utc)
+
+
+class LoopSpecUpdate(BaseModel):
+    agents: list[LoopSpecAgent] | None = None
+    tool_permissions: list[ToolPermission] | None = None
+    handoffs: list[dict[str, str]] | None = None
+    success_criteria: list[str] | None = None
+    failure_criteria: list[str] | None = None
+    gates: list[str] | None = None
+    context_policy: dict[str, Any] | None = None
+    improvement_strategy: str | None = None
+
+
+class GoalCreateResult(BaseModel):
+    goal: Goal
+    clarification: ClarificationSession | None = None
+    loop_spec: LoopSpec | None = None
+
+
+class ClarificationResult(BaseModel):
+    clarification: ClarificationSession
+    loop_spec: LoopSpec | None = None
 
 
 class Run(BaseModel):
