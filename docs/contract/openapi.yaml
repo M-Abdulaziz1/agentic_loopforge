@@ -307,6 +307,50 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
 
+  /api/runs/{runId}/artifacts:
+    parameters:
+      - { name: runId, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: listArtifacts
+      summary: List artifacts produced by a run
+      responses:
+        "200":
+          description: Artifacts
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Artifact" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/runs/{runId}/results:
+    parameters:
+      - { name: runId, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getResults
+      summary: Validated results for a finished run (insights + models + summary)
+      responses:
+        "200":
+          description: Results
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Results" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/runs/{runId}/context:
+    parameters:
+      - { name: runId, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getRunContext
+      summary: Context ledger + the current context pack for a run
+      responses:
+        "200":
+          description: Run context
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RunContext" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
 components:
   responses:
     NotFound:
@@ -570,3 +614,103 @@ components:
       properties:
         decision: { type: string, enum: [approve, reject] }
         note: { type: string }
+
+    Artifact:
+      type: object
+      required: [id, run_id, kind, metadata, created_at]
+      properties:
+        id: { type: string }
+        run_id: { type: string }
+        kind: { type: string, enum: [insight, model, code, plot, report] }
+        metadata: { type: object, additionalProperties: true }
+        storage_ref:
+          anyOf: [{ type: string }, { type: "null" }]
+        created_at: { type: string, format: date-time }
+
+    InsightResult:
+      type: object
+      required: [id, rank, claim, passed, test, p_value, effect_name, effect_value, n]
+      properties:
+        id: { type: string }
+        rank: { type: integer }
+        claim: { type: string }
+        passed: { type: boolean }
+        test: { type: string }
+        p_value: { type: number }
+        effect_name: { type: string }
+        effect_value: { type: number }
+        n: { type: integer }
+        correction:
+          anyOf: [{ type: string }, { type: "null" }]
+        plot_ref:
+          anyOf: [{ type: string }, { type: "null" }]
+
+    ModelResult:
+      type: object
+      required: [id, name, metric_name, metric_value, baseline_name, baseline_value, beats_baseline, leakage_ok]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        metric_name: { type: string }
+        metric_value: { type: number }
+        baseline_name: { type: string }
+        baseline_value: { type: number }
+        beats_baseline: { type: boolean }
+        leakage_ok: { type: boolean }
+
+    Results:
+      type: object
+      required: [run_id, status, summary, insights, models]
+      properties:
+        run_id: { type: string }
+        status: { $ref: "#/components/schemas/RunStatus" }
+        summary:
+          type: object
+          required: [validated, rejected]
+          properties:
+            validated: { type: integer }
+            rejected: { type: integer }
+            cost_usd:
+              anyOf: [{ type: number }, { type: "null" }]
+            duration_s:
+              anyOf: [{ type: number }, { type: "null" }]
+        insights:
+          type: array
+          items: { $ref: "#/components/schemas/InsightResult" }
+        models:
+          type: array
+          items: { $ref: "#/components/schemas/ModelResult" }
+
+    ContextEntry:
+      type: object
+      required: [id, run_id, kind, text, tags, token_count, created_at]
+      properties:
+        id: { type: string }
+        run_id: { type: string }
+        kind: { type: string }
+        text: { type: string }
+        tags: { type: array, items: { type: string } }
+        source_event_id:
+          anyOf: [{ type: string }, { type: "null" }]
+        token_count: { type: integer }
+        created_at: { type: string, format: date-time }
+
+    ContextPack:
+      type: object
+      required: [entries, summary, token_count, overflow]
+      properties:
+        entries:
+          type: array
+          items: { $ref: "#/components/schemas/ContextEntry" }
+        summary: { type: string }
+        token_count: { type: integer }
+        overflow: { type: boolean }
+
+    RunContext:
+      type: object
+      required: [ledger, pack]
+      properties:
+        ledger:
+          type: array
+          items: { $ref: "#/components/schemas/ContextEntry" }
+        pack: { $ref: "#/components/schemas/ContextPack" }

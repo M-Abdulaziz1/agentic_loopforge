@@ -143,3 +143,33 @@ only starts from an `approved` spec; gate decisions are auditable.
 
 > Frontend syncs this contract into your worktree with:
 > `git -C ../loopforge-be checkout fe/plan-2 -- docs/contract/`
+
+---
+
+# Codex brief — backend, Plan 5 (Results · Artifacts · Context)
+
+Gate endpoints already exist from Plan 3 — the frontend Gate Inbox reuses them. New work:
+
+1. `GET /api/runs/{runId}/artifacts` — list a run's artifacts (`Artifact`: kind ∈
+   insight|model|code|plot|report). Reuse `artifacts` from `domain.py`.
+2. `GET /api/runs/{runId}/results` — assemble `Results` for a finished run: `summary`
+   (validated/rejected counts, optional cost/duration), `insights` (`InsightResult` with
+   test, p_value, effect, n, optional correction/plot_ref), and `models` (`ModelResult`
+   with metric vs. baseline + leakage_ok). Insights come only from **validated** artifacts;
+   honest-empty (`completed_no_findings`) returns empty arrays — never fabricate.
+3. `GET /api/runs/{runId}/context` — `RunContext` = `{ ledger: ContextEntry[], pack:
+   ContextPack }`. Ledger is the append-only context entries; pack is the current bounded
+   context pack (entries, summary, token_count, overflow). Reuse `ContextEntry`/`ContextPack`.
+
+**Guardrails:** no raw PII in any artifact/ledger text returned (mask in profiling);
+results never include unvalidated insights; preserve the raw ledger (compaction summarizes,
+never erases).
+
+First: `git -C ../loopforge-be merge main` (consolidates Plan 2/3), then
+`git -C ../loopforge-be checkout fe/plan-5 -- docs/contract/` to get this contract.
+
+## Contract change log
+
+- **2026-06-28 — add Results/Artifacts/Context slice (Plan 5).** Added
+  `GET /api/runs/{runId}/artifacts|results|context` and `Artifact`, `InsightResult`,
+  `ModelResult`, `Results`, `ContextEntry`, `ContextPack`, `RunContext` schemas.
