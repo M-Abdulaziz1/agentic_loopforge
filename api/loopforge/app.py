@@ -92,7 +92,10 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=404, detail="Clarification question not found")
 
         answers = [*session.answers, {"question_id": payload.question_id, "answer": payload.answer}]
-        if len(payload.answer.strip().split()) >= 6:
+        answered_question_ids = {answer["question_id"] for answer in answers if answer["answer"].strip()}
+        all_questions_answered = question_ids.issubset(answered_question_ids)
+        clarity_threshold_met = len(payload.answer.strip().split()) >= 6
+        if all_questions_answered or clarity_threshold_met:
             session = session.model_copy(
                 update={
                     "answers": answers,

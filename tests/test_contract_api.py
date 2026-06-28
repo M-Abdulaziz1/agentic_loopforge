@@ -74,6 +74,30 @@ def test_clarification_answer_generates_loop_spec_when_ready() -> None:
     assert body["loop_spec"]["status"] == "draft"
 
 
+def test_answering_all_clarification_questions_persists_loop_spec() -> None:
+    client = TestClient(create_app())
+    created = client.post("/api/goals", json={"text": "make it better"}).json()
+    goal_id = created["goal"]["id"]
+    question_id = created["clarification"]["questions"][0]["id"]
+
+    response = client.post(
+        f"/api/goals/{goal_id}/clarification/answers",
+        json={"question_id": question_id, "answer": "A checklist"},
+    )
+    body = response.json()
+    spec_id = body["loop_spec"]["id"]
+    listed = client.get(f"/api/loop-specs?goal_id={goal_id}")
+    fetched = client.get(f"/api/loop-specs/{spec_id}")
+
+    assert response.status_code == 200
+    assert body["clarification"]["status"] == "ready"
+    assert body["loop_spec"] is not None
+    assert listed.status_code == 200
+    assert [spec["id"] for spec in listed.json()] == [spec_id]
+    assert fetched.status_code == 200
+    assert fetched.json()["id"] == spec_id
+
+
 def test_loop_spec_contract_lists_gets_updates_and_approves_drafts() -> None:
     client = TestClient(create_app())
     created = client.post(
