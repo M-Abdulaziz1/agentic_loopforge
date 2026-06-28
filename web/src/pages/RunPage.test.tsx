@@ -18,13 +18,13 @@ function renderRun() {
 
 test("shows live status and the step meter", async () => {
   renderRun();
-  expect(await screen.findByText("RUNNING")).toBeInTheDocument();
+  expect(await screen.findByTestId("run-status")).toHaveTextContent("RUNNING");
   expect(screen.getByText("STEPS")).toBeInTheDocument();
 });
 
 test("the Events tab lists run events", async () => {
   renderRun();
-  await screen.findByText("RUNNING");
+  await screen.findByTestId("run-status");
   await userEvent.click(screen.getByRole("button", { name: "events" }));
   expect(await screen.findByText("Entered planner")).toBeInTheDocument();
 });

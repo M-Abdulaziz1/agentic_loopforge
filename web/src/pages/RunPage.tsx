@@ -6,6 +6,7 @@ import { useLoopSpec } from "../lib/api/loopspecs";
 import { useGoal } from "../lib/api/goals";
 import { reduceRunEvents } from "../lib/runEvents";
 import { MeterBar } from "../components/ui/MeterBar";
+import { AgentCanvas } from "../components/run/AgentCanvas";
 import type { RunEvent, RunEventType } from "../lib/api/types";
 
 const TABS = ["canvas", "timeline", "events"] as const;
@@ -14,6 +15,8 @@ export function RunPage() {
   const { runId = "" } = useParams();
   const tab = useUiStore((s) => s.activeRunTab);
   const setTab = useUiStore((s) => s.setActiveRunTab);
+  const selectedAgentId = useUiStore((s) => s.selectedAgentId);
+  const setSelectedAgent = useUiStore((s) => s.setSelectedAgent);
 
   const { data: run, isLoading } = useRun(runId);
   const { data: spec } = useLoopSpec(run?.loop_spec_id ?? "");
@@ -86,13 +89,25 @@ export function RunPage() {
 
       {/* stage */}
       <div className="grid flex-1 grid-cols-[1fr_340px] overflow-hidden">
-        <div className="overflow-auto">
+        <div className="relative overflow-hidden">
           {tab === "events" ? (
-            <EventLog events={events} />
-          ) : (
-            <div className="grid h-full place-items-center text-mut">
-              {tab === "canvas" ? "Agent canvas — P3-3" : "Timeline — coming next"}
+            <div className="h-full overflow-auto">
+              <EventLog events={events} />
             </div>
+          ) : tab === "canvas" ? (
+            spec ? (
+              <AgentCanvas
+                agents={spec.agents}
+                handoffs={spec.handoffs}
+                view={view}
+                selectedId={selectedAgentId}
+                onSelect={setSelectedAgent}
+              />
+            ) : (
+              <div className="grid h-full place-items-center text-mut">Loading agents…</div>
+            )
+          ) : (
+            <div className="grid h-full place-items-center text-mut">Timeline — coming next</div>
           )}
         </div>
         <aside className="overflow-auto border-l border-[var(--line)] p-5">
@@ -113,6 +128,7 @@ export function RunPage() {
 function StatusPill({ status, live }: { status: string; live: boolean }) {
   return (
     <span
+      data-testid="run-status"
       className={cn(
         "flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-bold tracking-[.3px]",
         live
