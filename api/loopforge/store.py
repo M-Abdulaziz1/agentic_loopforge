@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from api.loopforge.domain import ContextEntry, Gate, Goal, LoopSpec, Run, RunEvent
+from api.loopforge.domain import ClarificationSession, ContextEntry, Gate, GateStatus, Goal, LoopSpec, Run, RunEvent
 
 
 class InMemoryStore:
@@ -11,6 +11,7 @@ class InMemoryStore:
         self.events: dict[str, list[RunEvent]] = {}
         self.context_entries: dict[str, list[ContextEntry]] = {}
         self.gates: dict[str, Gate] = {}
+        self.clarifications_by_goal: dict[str, ClarificationSession] = {}
 
     def save_goal(self, goal: Goal) -> Goal:
         self.goals[goal.id] = goal
@@ -19,6 +20,16 @@ class InMemoryStore:
     def get_goal(self, goal_id: str) -> Goal:
         return self.goals[goal_id]
 
+    def list_goals(self) -> list[Goal]:
+        return sorted(self.goals.values(), key=lambda goal: goal.created_at, reverse=True)
+
+    def save_clarification(self, session: ClarificationSession) -> ClarificationSession:
+        self.clarifications_by_goal[session.goal_id] = session
+        return session
+
+    def get_clarification_by_goal(self, goal_id: str) -> ClarificationSession:
+        return self.clarifications_by_goal[goal_id]
+
     def save_loop_spec(self, spec: LoopSpec) -> LoopSpec:
         self.loop_specs[spec.id] = spec
         return spec
@@ -26,12 +37,25 @@ class InMemoryStore:
     def get_loop_spec(self, spec_id: str) -> LoopSpec:
         return self.loop_specs[spec_id]
 
+    def list_loop_specs(self, goal_id: str | None = None) -> list[LoopSpec]:
+        specs = list(self.loop_specs.values())
+        if goal_id is not None:
+            specs = [spec for spec in specs if spec.goal_id == goal_id]
+        return sorted(specs, key=lambda spec: spec.created_at, reverse=True)
+
     def save_run(self, run: Run) -> Run:
         self.runs[run.id] = run
         return run
 
     def get_run(self, run_id: str) -> Run:
         return self.runs[run_id]
+
+    def list_runs(self) -> list[Run]:
+        return sorted(
+            self.runs.values(),
+            key=lambda run: run.started_at or run.ended_at or run.id,
+            reverse=True,
+        )
 
     def append_event(self, event: RunEvent) -> RunEvent:
         events = self.events.setdefault(event.run_id, [])
@@ -52,3 +76,14 @@ class InMemoryStore:
     def save_gate(self, gate: Gate) -> Gate:
         self.gates[gate.id] = gate
         return gate
+
+    def get_gate(self, gate_id: str) -> Gate:
+        return self.gates[gate_id]
+
+    def list_gates(self, status: GateStatus | None = None, run_id: str | None = None) -> list[Gate]:
+        gates = list(self.gates.values())
+        if status is not None:
+            gates = [gate for gate in gates if gate.status == status]
+        if run_id is not None:
+            gates = [gate for gate in gates if gate.run_id == run_id]
+        return gates

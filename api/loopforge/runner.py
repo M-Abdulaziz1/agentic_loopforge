@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from api.loopforge.context import ContextManager
-from api.loopforge.domain import ContextEntry, Goal, LoopSpec, Run, RunEvent, RunStatus, now_utc
+from api.loopforge.domain import ContextEntry, Gate, Goal, LoopSpec, Run, RunEvent, RunStatus, now_utc
 from api.loopforge.providers import LLMProvider, SandboxProvider
 from api.loopforge.store import InMemoryStore
 from api.loopforge.tools import ToolRegistry
@@ -30,7 +30,6 @@ class LoopRunner:
                 started_at=now_utc(),
             )
         )
-        self._event(run, "run_started", "Run started")
 
         if not self._consume_step(run, goal):
             return self._budget_exhausted(run)
@@ -45,20 +44,39 @@ class LoopRunner:
         if pack.overflow:
             run = run.model_copy(update={"status": RunStatus.CONTEXT_OVERFLOW, "ended_at": now_utc()})
             self.store.save_run(run)
-            self._event(run, "context_overflow", "Context pack could not fit within budget")
+            self._event(run, "run_status", "Context pack could not fit within budget", {"status": run.status})
             return run
-        self._event(run, "context_pack", "Context pack built", {"tokens": pack.token_count})
+        self._event(run, "node_start", "Executor started", {"agent": spec.agents[0].name, "context_tokens": pack.token_count})
 
         if not self._consume_step(run, goal):
             return self._budget_exhausted(run)
+        if spec.gates:
+            gate = self.store.save_gate(
+                Gate(
+                    run_id=run.id,
+                    gate_type=spec.gates[0],
+                    context={
+                        "goal_id": goal.id,
+                        "loop_spec_id": spec.id,
+                        "message": "Run paused at configured approval gate.",
+                    },
+                )
+            )
+            paused = run.model_copy(update={"status": RunStatus.PENDING_APPROVAL})
+            self.store.save_run(paused)
+            self._event(paused, "gate_pending", "Run is waiting for gate approval", {"gate_id": gate.id, "gate_type": gate.gate_type})
+            self._event(paused, "run_status", "Run pending approval", {"status": paused.status})
+            return paused
+
         response = self.llm.complete(system=spec.agents[0].system_prompt, prompt=goal.text)
         run = run.model_copy(update={"spent_llm_calls": run.spent_llm_calls + 1})
         self.store.save_run(run)
-        self._event(run, "agent_step", "Executor produced an artifact", {"tokens": response.tokens_used})
+        self._event(run, "llm_call", "Executor called LLM", {"agent": spec.agents[0].name, "tokens": response.tokens_used})
 
         if not self._consume_step(run, goal):
             return self._budget_exhausted(run)
-        self._event(run, "review", "Reviewer accepted deterministic result")
+        self._event(run, "cost_update", "Budget updated", {"spent_steps": run.spent_steps, "spent_llm_calls": run.spent_llm_calls})
+        self._event(run, "node_end", "Executor completed", {"agent": spec.agents[0].name})
 
         completed = run.model_copy(
             update={
@@ -68,7 +86,7 @@ class LoopRunner:
             }
         )
         self.store.save_run(completed)
-        self._event(completed, "run_completed", "Run completed")
+        self._event(completed, "run_status", "Run completed", {"status": completed.status})
         return completed
 
     def _consume_step(self, run: Run, goal: Goal) -> bool:
@@ -82,7 +100,7 @@ class LoopRunner:
     def _budget_exhausted(self, run: Run) -> Run:
         exhausted = run.model_copy(update={"status": RunStatus.BUDGET_EXHAUSTED, "ended_at": now_utc()})
         self.store.save_run(exhausted)
-        self._event(exhausted, "budget_exhausted", "Step budget exhausted")
+        self._event(exhausted, "run_status", "Step budget exhausted", {"status": exhausted.status})
         return exhausted
 
     def _event(self, run: Run, event_type: str, message: str, payload: dict[str, object] | None = None) -> None:

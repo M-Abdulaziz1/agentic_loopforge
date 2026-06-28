@@ -40,6 +40,11 @@ class GateStatus(StrEnum):
     REJECTED = "rejected"
 
 
+class ClarificationStatus(StrEnum):
+    OPEN = "open"
+    READY = "ready"
+
+
 class GoalToggles(BaseModel):
     internet: bool = False
     code_sandbox: bool = True
@@ -79,6 +84,12 @@ class ClarificationSession(BaseModel):
     answers: list[dict[str, str]] = Field(default_factory=list)
     missing_requirements: list[str] = Field(default_factory=list)
     clarity_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    status: ClarificationStatus = ClarificationStatus.OPEN
+
+
+class ClarificationAnswer(BaseModel):
+    question_id: str
+    answer: str
 
 
 class ToolPermission(BaseModel):
@@ -110,6 +121,28 @@ class LoopSpec(BaseModel):
     created_at: datetime = Field(default_factory=now_utc)
 
 
+class LoopSpecUpdate(BaseModel):
+    agents: list[LoopSpecAgent] | None = None
+    tool_permissions: list[ToolPermission] | None = None
+    handoffs: list[dict[str, str]] | None = None
+    success_criteria: list[str] | None = None
+    failure_criteria: list[str] | None = None
+    gates: list[str] | None = None
+    context_policy: dict[str, Any] | None = None
+    improvement_strategy: str | None = None
+
+
+class GoalCreateResult(BaseModel):
+    goal: Goal
+    clarification: ClarificationSession | None = None
+    loop_spec: LoopSpec | None = None
+
+
+class ClarificationResult(BaseModel):
+    clarification: ClarificationSession
+    loop_spec: LoopSpec | None = None
+
+
 class Run(BaseModel):
     id: str = Field(default_factory=lambda: new_id("run"))
     goal_id: str
@@ -117,9 +150,14 @@ class Run(BaseModel):
     status: RunStatus = RunStatus.PENDING_APPROVAL
     spent_steps: int = 0
     spent_llm_calls: int = 0
+    spent_usd: float | None = None
     result_summary: str | None = None
     started_at: datetime | None = None
     ended_at: datetime | None = None
+
+
+class RunStartRequest(BaseModel):
+    loop_spec_id: str
 
 
 class RunEvent(BaseModel):
@@ -156,4 +194,9 @@ class Gate(BaseModel):
     gate_type: str
     status: GateStatus = GateStatus.PENDING
     context: dict[str, Any] = Field(default_factory=dict)
+    note: str | None = None
+
+
+class GateDecision(BaseModel):
+    decision: Literal["approve", "reject"]
     note: str | None = None
