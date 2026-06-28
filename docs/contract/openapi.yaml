@@ -1,0 +1,358 @@
+openapi: 3.1.0
+info:
+  title: LoopForge API — Plan 2 slice (Goal → Clarify → Loop Spec)
+  version: 0.2.0
+  description: >
+    Shared contract between the frontend (Claude) and backend (Codex). This is the
+    single source of truth for the Goal → Clarification → Loop Spec flow. Neither side
+    changes a schema or path without a contract renegotiation (see docs/contract/README.md).
+    Schemas mirror api/loopforge/domain.py; reuse those Pydantic models server-side.
+
+servers:
+  - url: http://localhost:8000
+    description: Local dev API
+
+paths:
+  /api/goals:
+    get:
+      operationId: listGoals
+      summary: List goals (most recent first)
+      responses:
+        "200":
+          description: Goals
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Goal" }
+    post:
+      operationId: createGoal
+      summary: Create a goal and run the clarity check
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GoalCreate" }
+      responses:
+        "201":
+          description: >
+            Goal created. If the goal needs clarification, `clarification` is present and
+            `loop_spec` is null. If it was clear enough, `loop_spec` is present.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GoalCreateResult" }
+
+  /api/goals/{goalId}:
+    parameters:
+      - { name: goalId, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getGoal
+      summary: Get a single goal
+      responses:
+        "200":
+          description: Goal
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Goal" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/goals/{goalId}/clarification:
+    parameters:
+      - { name: goalId, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getClarification
+      summary: Get the active clarification session for a goal
+      responses:
+        "200":
+          description: Clarification session
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClarificationSession" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/goals/{goalId}/clarification/answers:
+    parameters:
+      - { name: goalId, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: submitClarificationAnswer
+      summary: Submit an answer to a clarification question
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClarificationAnswer" }
+      responses:
+        "200":
+          description: >
+            Updated session. When clarity is sufficient and no blocking gaps remain,
+            `loop_spec` is present (generated) and the session `status` becomes "ready".
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClarificationResult" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/loop-specs:
+    get:
+      operationId: listLoopSpecs
+      summary: List loop specs, optionally filtered by goal
+      parameters:
+        - { name: goal_id, in: query, required: false, schema: { type: string } }
+      responses:
+        "200":
+          description: Loop specs
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/LoopSpec" }
+
+  /api/loop-specs/{specId}:
+    parameters:
+      - { name: specId, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getLoopSpec
+      summary: Get a loop spec
+      responses:
+        "200":
+          description: Loop spec
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoopSpec" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      operationId: updateLoopSpec
+      summary: Edit a draft loop spec (builder/form edits) → new version
+      description: >
+        Server MUST re-run graph validation and MUST reject tool permissions that violate
+        the goal's capability toggles (e.g. internet in offline_local). Returns the updated
+        spec on success.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoopSpecUpdate" }
+      responses:
+        "200":
+          description: Updated loop spec
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoopSpec" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /api/loop-specs/{specId}/approve:
+    parameters:
+      - { name: specId, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: approveLoopSpec
+      summary: Approve a loop spec so it can be run
+      responses:
+        "200":
+          description: Approved loop spec (status = "approved")
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoopSpec" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Spec not in an approvable state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+components:
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ValidationError:
+      description: Graph or permission validation failed
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Error:
+      type: object
+      required: [detail]
+      properties:
+        detail: { type: string }
+
+    GoalMode:
+      type: string
+      enum: [offline_local, online_enabled]
+
+    RunStatus:
+      type: string
+      enum:
+        [completed, needs_clarification, blocked, budget_exhausted, failed,
+         cancelled, unsafe_request, context_overflow, running, pending_approval]
+
+    GoalToggles:
+      type: object
+      required: [internet, code_sandbox, local_connectors]
+      properties:
+        internet: { type: boolean, default: false }
+        code_sandbox: { type: boolean, default: true }
+        local_connectors: { type: boolean, default: true }
+
+    Budget:
+      type: object
+      required: [max_steps, max_llm_calls, max_context_tokens]
+      properties:
+        max_steps: { type: integer, minimum: 1, default: 12 }
+        max_llm_calls: { type: integer, minimum: 0, default: 20 }
+        max_context_tokens: { type: integer, minimum: 512, default: 8000 }
+
+    GoalCreate:
+      type: object
+      required: [text]
+      properties:
+        text: { type: string, minLength: 3 }
+        mode: { $ref: "#/components/schemas/GoalMode" }
+        toggles: { $ref: "#/components/schemas/GoalToggles" }
+        constraints: { type: object, additionalProperties: true }
+        budget: { $ref: "#/components/schemas/Budget" }
+
+    Goal:
+      allOf:
+        - $ref: "#/components/schemas/GoalCreate"
+        - type: object
+          required: [id, status, created_at]
+          properties:
+            id: { type: string }
+            status: { $ref: "#/components/schemas/RunStatus" }
+            created_at: { type: string, format: date-time }
+
+    GoalCreateResult:
+      type: object
+      required: [goal]
+      properties:
+        goal: { $ref: "#/components/schemas/Goal" }
+        clarification:
+          anyOf:
+            - { $ref: "#/components/schemas/ClarificationSession" }
+            - { type: "null" }
+        loop_spec:
+          anyOf:
+            - { $ref: "#/components/schemas/LoopSpec" }
+            - { type: "null" }
+
+    ClarificationQuestion:
+      type: object
+      required: [id, question, missing_requirement]
+      properties:
+        id: { type: string }
+        question: { type: string }
+        missing_requirement: { type: string }
+
+    ClarificationSession:
+      type: object
+      required: [id, goal_id, questions, answers, missing_requirements, clarity_score, status]
+      properties:
+        id: { type: string }
+        goal_id: { type: string }
+        questions:
+          type: array
+          items: { $ref: "#/components/schemas/ClarificationQuestion" }
+        answers:
+          type: array
+          items:
+            type: object
+            additionalProperties: { type: string }
+        missing_requirements:
+          type: array
+          items: { type: string }
+        clarity_score: { type: number, minimum: 0, maximum: 1 }
+        status:
+          type: string
+          enum: [open, ready]
+          description: "open = more questions; ready = loop spec generated"
+
+    ClarificationAnswer:
+      type: object
+      required: [question_id, answer]
+      properties:
+        question_id: { type: string }
+        answer: { type: string }
+
+    ClarificationResult:
+      type: object
+      required: [clarification]
+      properties:
+        clarification: { $ref: "#/components/schemas/ClarificationSession" }
+        loop_spec:
+          anyOf:
+            - { $ref: "#/components/schemas/LoopSpec" }
+            - { type: "null" }
+
+    ToolPermission:
+      type: object
+      required: [tool_name, enabled, reason]
+      properties:
+        tool_name: { type: string }
+        enabled: { type: boolean }
+        reason: { type: string }
+
+    LoopSpecAgent:
+      type: object
+      required: [name, role, system_prompt, tools]
+      properties:
+        name: { type: string }
+        role: { type: string }
+        system_prompt: { type: string }
+        tools:
+          type: array
+          items: { type: string }
+
+    LoopSpec:
+      type: object
+      required:
+        [id, goal_id, version, agents, tool_permissions, handoffs, success_criteria,
+         failure_criteria, gates, context_policy, improvement_strategy, status, created_at]
+      properties:
+        id: { type: string }
+        goal_id: { type: string }
+        version: { type: integer, minimum: 1 }
+        agents:
+          type: array
+          items: { $ref: "#/components/schemas/LoopSpecAgent" }
+        tool_permissions:
+          type: array
+          items: { $ref: "#/components/schemas/ToolPermission" }
+        handoffs:
+          type: array
+          items:
+            type: object
+            additionalProperties: { type: string }
+        success_criteria: { type: array, items: { type: string } }
+        failure_criteria: { type: array, items: { type: string } }
+        gates: { type: array, items: { type: string } }
+        context_policy: { type: object, additionalProperties: true }
+        improvement_strategy: { type: string }
+        status:
+          type: string
+          enum: [draft, approved, rejected]
+        created_at: { type: string, format: date-time }
+
+    LoopSpecUpdate:
+      type: object
+      description: Partial update; any provided field replaces the existing one.
+      properties:
+        agents:
+          type: array
+          items: { $ref: "#/components/schemas/LoopSpecAgent" }
+        tool_permissions:
+          type: array
+          items: { $ref: "#/components/schemas/ToolPermission" }
+        handoffs:
+          type: array
+          items:
+            type: object
+            additionalProperties: { type: string }
+        success_criteria: { type: array, items: { type: string } }
+        failure_criteria: { type: array, items: { type: string } }
+        gates: { type: array, items: { type: string } }
+        context_policy: { type: object, additionalProperties: true }
+        improvement_strategy: { type: string }
