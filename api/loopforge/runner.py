@@ -68,6 +68,16 @@ class LoopRunner:
             self._event(paused, "run_status", "Run pending approval", {"status": paused.status})
             return paused
 
+        return self._complete_execution(run, goal, spec)
+
+    def resume_after_gate(self, run: Run, goal: Goal, spec: LoopSpec) -> Run:
+        running = run.model_copy(update={"status": RunStatus.RUNNING})
+        self.store.save_run(running)
+        if not self._consume_step(running, goal):
+            return self._budget_exhausted(running)
+        return self._complete_execution(running, goal, spec)
+
+    def _complete_execution(self, run: Run, goal: Goal, spec: LoopSpec) -> Run:
         response = self.llm.complete(system=spec.agents[0].system_prompt, prompt=goal.text)
         run = run.model_copy(update={"spent_llm_calls": run.spent_llm_calls + 1})
         self.store.save_run(run)

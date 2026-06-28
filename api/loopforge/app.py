@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sqlite3
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -36,7 +37,12 @@ from api.loopforge.tools import default_tool_registry
 
 
 def create_store(settings: Settings) -> Store:
-    return SQLiteStore(settings.storage_path)
+    try:
+        return SQLiteStore(settings.storage_path)
+    except (OSError, sqlite3.Error):
+        if settings.storage_path != Settings().storage_path:
+            raise
+        return InMemoryStore()
 
 
 def create_app(store: Store | None = None, settings: Settings | None = None) -> FastAPI:
@@ -253,15 +259,13 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
             return decided
 
         if all(existing.status == GateStatus.APPROVED for existing in store.list_gates(run_id=run.id)):
-            completed = run.model_copy(
-                update={
-                    "status": RunStatus.COMPLETED,
-                    "result_summary": "Loop completed after gate approval.",
-                    "ended_at": now_utc(),
-                }
-            )
-            store.save_run(completed)
-            _append_run_status_event(store, completed, "Run completed after gate approval", {"status": completed.status, "gate_id": gate.id})
+            try:
+                goal = store.get_goal(run.goal_id)
+                spec = store.get_loop_spec(run.loop_spec_id)
+            except KeyError as exc:
+                raise HTTPException(status_code=404, detail="Run goal or loop spec not found") from exc
+            runner = LoopRunner(store=store, llm=llm, sandbox=sandbox, tools=tools)
+            runner.resume_after_gate(run, goal, spec)
         return decided
 
     return app
