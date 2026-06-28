@@ -27,8 +27,8 @@ from api.loopforge.domain import (
     now_utc,
 )
 from api.loopforge.planner import LoopPlanner
-from api.loopforge.providers import FakeLLMProvider, FakeSandboxProvider
 from api.loopforge.runner import LoopRunner
+from api.loopforge.runtime import create_llm_provider, create_sandbox_provider
 from api.loopforge.settings import Settings
 from api.loopforge.sqlite_store import SQLiteStore
 from api.loopforge.store import InMemoryStore, Store
@@ -39,7 +39,7 @@ def create_store(settings: Settings) -> Store:
     return SQLiteStore(settings.storage_path)
 
 
-def create_app(store: Store | None = None) -> FastAPI:
+def create_app(store: Store | None = None, settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="LoopForge")
     app.add_middleware(
         CORSMiddleware,
@@ -48,10 +48,11 @@ def create_app(store: Store | None = None) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    settings = settings or Settings()
     store = store or InMemoryStore()
-    llm = FakeLLMProvider()
+    llm = create_llm_provider(settings)
     planner = LoopPlanner(llm=llm)
-    sandbox = FakeSandboxProvider()
+    sandbox = create_sandbox_provider(settings)
     tools = default_tool_registry()
 
     @app.get("/api/goals")
@@ -312,4 +313,5 @@ def _is_terminal(status: RunStatus) -> bool:
     }
 
 
-app = create_app(store=create_store(Settings.from_env()))
+_settings = Settings.from_env()
+app = create_app(store=create_store(_settings), settings=_settings)
