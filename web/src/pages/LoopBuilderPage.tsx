@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import ReactFlow, {
   addEdge,
@@ -6,14 +6,17 @@ import ReactFlow, {
   BackgroundVariant,
   Controls,
   MiniMap,
-  useEdgesState,
-  useNodesState,
   type Connection,
   type Node,
+  type NodeMouseHandler,
+  useEdgesState,
+  useNodesState,
 } from "reactflow";
 import "reactflow/dist/style.css";
 import { AgentNode } from "../components/run/AgentNode";
+import { NodeConfigPanel } from "../components/run/NodeConfigPanel";
 import { useLoopSpec, useUpdateLoopSpec } from "../lib/api/loopspecs";
+import { useGoal } from "../lib/api/goals";
 import { validateLoopGraph } from "../lib/validateLoopGraph";
 import type { AgentNodeData } from "../lib/buildAgentFlow";
 import type { LoopSpecAgent } from "../lib/api/types";
@@ -28,8 +31,10 @@ export function LoopBuilderPage() {
   const { data: spec, isLoading } = useLoopSpec(specId);
   const update = useUpdateLoopSpec(specId);
 
+  const { data: goal } = useGoal(spec?.goal_id ?? "");
   const [nodes, setNodes, onNodesChange] = useNodesState<BuilderNodeData>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   // Seed the canvas from the spec once it loads.
   useEffect(() => {
@@ -67,6 +72,34 @@ export function LoopBuilderPage() {
 
   function onConnect(c: Connection) {
     setEdges((es) => addEdge({ ...c, label: "handoff" }, es));
+  }
+
+  const onNodeClick: NodeMouseHandler = (_e, node) => setSelectedId(node.id);
+
+  const selected = nodes.find((n) => n.id === selectedId);
+  const internetAllowed = goal?.toggles.internet ?? false;
+
+  function patchSelected(partial: Partial<BuilderNodeData>) {
+    setNodes((ns) =>
+      ns.map((n) => (n.id === selectedId ? { ...n, data: { ...n.data, ...partial } } : n)),
+    );
+  }
+
+  function toggleTool(tool: string) {
+    if (!selected) return;
+    const has = selected.data.tools.includes(tool);
+    patchSelected({
+      tools: has
+        ? selected.data.tools.filter((t) => t !== tool)
+        : [...selected.data.tools, tool],
+    });
+  }
+
+  function deleteSelected() {
+    if (!selectedId) return;
+    setNodes((ns) => ns.filter((n) => n.id !== selectedId));
+    setEdges((es) => es.filter((e) => e.source !== selectedId && e.target !== selectedId));
+    setSelectedId(null);
   }
 
   function addAgent() {
@@ -135,6 +168,8 @@ export function LoopBuilderPage() {
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
+            onNodeClick={onNodeClick}
+            onPaneClick={() => setSelectedId(null)}
             fitView
             proOptions={{ hideAttribution: true }}
           >
@@ -145,6 +180,19 @@ export function LoopBuilderPage() {
         </div>
 
         <aside className="overflow-auto border-l border-[var(--line)] p-5">
+          {selected ? (
+            <NodeConfigPanel
+              name={selected.data.name}
+              role={selected.data.role}
+              systemPrompt={selected.data.systemPrompt}
+              tools={selected.data.tools}
+              internetAllowed={internetAllowed}
+              onRole={(v) => patchSelected({ role: v })}
+              onPrompt={(v) => patchSelected({ systemPrompt: v })}
+              onToggleTool={toggleTool}
+              onDelete={deleteSelected}
+            />
+          ) : null}
           <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-mut">
             Validation
           </h3>
