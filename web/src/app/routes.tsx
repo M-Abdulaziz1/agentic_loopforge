@@ -9,6 +9,8 @@ import { GateInboxPage } from "../pages/GateInboxPage";
 import { ResultsPage } from "../pages/ResultsPage";
 import { RunsListPage } from "../pages/RunsListPage";
 import { ContextPage } from "../pages/ContextPage";
+import { LoopBuilderPage } from "../pages/LoopBuilderPage";
+import { TemplatesPage } from "../pages/TemplatesPage";
 
 export function AppRoutes() {
   return (
@@ -20,7 +22,8 @@ export function AppRoutes() {
         <Route path="/goals/:goalId/clarify" element={<ClarificationPage />} />
         <Route path="/specs" element={<Placeholder title="Loop Specs" />} />
         <Route path="/specs/:specId" element={<LoopSpecPage />} />
-        <Route path="/specs/:specId/edit" element={<Placeholder title="Loop Builder" />} />
+        <Route path="/specs/:specId/edit" element={<LoopBuilderPage />} />
+        <Route path="/templates" element={<TemplatesPage />} />
         <Route
           path="/runs"
           element={<RunsListPage title="Runs" to={(id) => `/runs/${id}`} />}

@@ -205,6 +205,23 @@ export type ContextPack = {
 
 export type RunContext = { ledger: ContextEntry[]; pack: ContextPack };
 
+export type LoopTemplate = {
+  id: string;
+  name: string;
+  description: string | null;
+  agents: LoopSpecAgent[];
+  tool_permissions: ToolPermission[];
+  handoffs: Array<Record<string, string>>;
+  success_criteria: string[];
+  failure_criteria: string[];
+  gates: string[];
+  context_policy: Record<string, unknown>;
+  improvement_strategy: string;
+  created_at: string;
+};
+
+export type LoopTemplateCreate = { name: string; description?: string; spec_id: string };
+
 export type LoopSpecUpdate = Partial<
   Pick<
     LoopSpec,
