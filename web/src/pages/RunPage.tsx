@@ -199,7 +199,7 @@ function EventLog({ events }: { events: RunEvent[] }) {
   const ordered = [...events].sort((a, b) => a.seq - b.seq);
   return (
     <div className="p-4">
-      <div className="flex flex-col">
+      <div className="flex flex-col" role="log" aria-live="polite" aria-label="Run events">
         {ordered.map((e) => (
           <div
             key={e.id}
