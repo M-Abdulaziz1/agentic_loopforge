@@ -16,4 +16,27 @@ Run the API locally:
 ./.venv/bin/python -m uvicorn api.loopforge.app:app --reload
 ```
 
-The first implementation uses deterministic fake providers. Follow-up implementation plans replace those providers with durable storage, a worker, Docker plus gVisor sandbox execution, and local OpenAI-compatible LLM calls.
+By default, the importable ASGI app stores state in SQLite at `.loopforge/loopforge.db`
+and uses deterministic fake LLM/sandbox providers for offline development.
+
+Use a local or cloud OpenAI-compatible LLM endpoint:
+
+```bash
+LOOPFORGE_LLM_PROVIDER=openai_compatible
+LOOPFORGE_OPENAI_COMPATIBLE_BASE_URL=http://localhost:8000/v1
+LOOPFORGE_OPENAI_COMPATIBLE_API_KEY=local-dev-key
+LOOPFORGE_OPENAI_COMPATIBLE_MODEL=local-model
+```
+
+Use Docker plus gVisor for sandbox execution:
+
+```bash
+LOOPFORGE_SANDBOX_PROVIDER=docker_gvisor
+LOOPFORGE_DOCKER_GVISOR_RUNTIME=runsc
+LOOPFORGE_DOCKER_SANDBOX_IMAGE=python:3.12-slim
+LOOPFORGE_DOCKER_NETWORK=none
+```
+
+The OpenAI-compatible provider works with cloud providers, vLLM, LM Studio,
+Ollama OpenAI-compatible gateways, or internal inference servers that support
+`/v1/chat/completions`.

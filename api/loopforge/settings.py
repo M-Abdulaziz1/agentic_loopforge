@@ -17,6 +17,7 @@ class SandboxProviderMode(StrEnum):
 
 
 class Settings(BaseModel):
+    storage_path: str = ".loopforge/loopforge.db"
     llm_provider: LLMProviderMode = LLMProviderMode.FAKE
     sandbox_provider: SandboxProviderMode = SandboxProviderMode.FAKE
     openai_compatible_base_url: str = "http://localhost:8000/v1"
@@ -33,6 +34,7 @@ class Settings(BaseModel):
     @classmethod
     def from_env(cls) -> "Settings":
         return cls(
+            storage_path=os.getenv("LOOPFORGE_STORAGE_PATH", ".loopforge/loopforge.db"),
             llm_provider=os.getenv("LOOPFORGE_LLM_PROVIDER", LLMProviderMode.FAKE.value),
             sandbox_provider=os.getenv("LOOPFORGE_SANDBOX_PROVIDER", SandboxProviderMode.FAKE.value),
             openai_compatible_base_url=os.getenv("LOOPFORGE_OPENAI_COMPATIBLE_BASE_URL", "http://localhost:8000/v1"),

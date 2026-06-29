@@ -1,6 +1,33 @@
 from __future__ import annotations
 
-from api.loopforge.domain import ClarificationSession, ContextEntry, Gate, GateStatus, Goal, LoopSpec, Run, RunEvent
+from typing import Protocol
+
+from api.loopforge.domain import Artifact, AuditEvent, ClarificationSession, ContextEntry, Gate, GateStatus, Goal, LoopSpec, Run, RunEvent
+
+
+class Store(Protocol):
+    def save_goal(self, goal: Goal) -> Goal: ...
+    def get_goal(self, goal_id: str) -> Goal: ...
+    def list_goals(self) -> list[Goal]: ...
+    def save_clarification(self, session: ClarificationSession) -> ClarificationSession: ...
+    def get_clarification_by_goal(self, goal_id: str) -> ClarificationSession: ...
+    def save_loop_spec(self, spec: LoopSpec) -> LoopSpec: ...
+    def get_loop_spec(self, spec_id: str) -> LoopSpec: ...
+    def list_loop_specs(self, goal_id: str | None = None) -> list[LoopSpec]: ...
+    def save_run(self, run: Run) -> Run: ...
+    def get_run(self, run_id: str) -> Run: ...
+    def list_runs(self) -> list[Run]: ...
+    def append_event(self, event: RunEvent) -> RunEvent: ...
+    def list_events(self, run_id: str) -> list[RunEvent]: ...
+    def save_artifact(self, artifact: Artifact) -> Artifact: ...
+    def list_artifacts(self, run_id: str) -> list[Artifact]: ...
+    def append_context(self, entry: ContextEntry) -> ContextEntry: ...
+    def list_context(self, run_id: str) -> list[ContextEntry]: ...
+    def save_gate(self, gate: Gate) -> Gate: ...
+    def get_gate(self, gate_id: str) -> Gate: ...
+    def list_gates(self, status: GateStatus | None = None, run_id: str | None = None) -> list[Gate]: ...
+    def append_audit_event(self, event: AuditEvent) -> AuditEvent: ...
+    def list_audit_events(self) -> list[AuditEvent]: ...
 
 
 class InMemoryStore:
@@ -9,9 +36,11 @@ class InMemoryStore:
         self.loop_specs: dict[str, LoopSpec] = {}
         self.runs: dict[str, Run] = {}
         self.events: dict[str, list[RunEvent]] = {}
+        self.artifacts: dict[str, list[Artifact]] = {}
         self.context_entries: dict[str, list[ContextEntry]] = {}
         self.gates: dict[str, Gate] = {}
         self.clarifications_by_goal: dict[str, ClarificationSession] = {}
+        self.audit_events: list[AuditEvent] = []
 
     def save_goal(self, goal: Goal) -> Goal:
         self.goals[goal.id] = goal
@@ -66,6 +95,18 @@ class InMemoryStore:
     def list_events(self, run_id: str) -> list[RunEvent]:
         return list(self.events.get(run_id, []))
 
+    def save_artifact(self, artifact: Artifact) -> Artifact:
+        artifacts = self.artifacts.setdefault(artifact.run_id, [])
+        existing_index = next((index for index, existing in enumerate(artifacts) if existing.id == artifact.id), None)
+        if existing_index is None:
+            artifacts.append(artifact)
+        else:
+            artifacts[existing_index] = artifact
+        return artifact
+
+    def list_artifacts(self, run_id: str) -> list[Artifact]:
+        return list(self.artifacts.get(run_id, []))
+
     def append_context(self, entry: ContextEntry) -> ContextEntry:
         self.context_entries.setdefault(entry.run_id, []).append(entry)
         return entry
@@ -87,3 +128,10 @@ class InMemoryStore:
         if run_id is not None:
             gates = [gate for gate in gates if gate.run_id == run_id]
         return gates
+
+    def append_audit_event(self, event: AuditEvent) -> AuditEvent:
+        self.audit_events.append(event)
+        return event
+
+    def list_audit_events(self) -> list[AuditEvent]:
+        return list(self.audit_events)

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
+import subprocess
 from typing import Protocol
+from uuid import uuid4
 
 import httpx
 
@@ -90,6 +93,79 @@ class SandboxResult:
 class SandboxProvider(Protocol):
     def run_code(self, code: str, *, timeout_seconds: int) -> SandboxResult:
         raise NotImplementedError
+
+
+class SandboxProviderError(RuntimeError):
+    pass
+
+
+class DockerGvisorSandboxProvider:
+    def __init__(
+        self,
+        *,
+        runtime: str = "runsc",
+        image: str = "python:3.12-slim",
+        workspace_root: str | Path = "/tmp/loopforge-workspaces",
+        network: str = "none",
+        memory: str = "512m",
+        cpus: str = "1.0",
+        command_runner=None,
+    ) -> None:
+        self.runtime = runtime
+        self.image = image
+        self.workspace_root = Path(workspace_root)
+        self.network = network
+        self.memory = memory
+        self.cpus = cpus
+        self.command_runner = command_runner or self._run_subprocess
+
+    def run_code(self, code: str, *, timeout_seconds: int) -> SandboxResult:
+        workspace = self.workspace_root / uuid4().hex
+        workspace.mkdir(parents=True, exist_ok=False)
+        script = workspace / "main.py"
+        script.write_text(code, encoding="utf-8")
+
+        command = [
+            "docker",
+            "run",
+            "--rm",
+            f"--runtime={self.runtime}",
+            f"--network={self.network}",
+            "--read-only",
+            "--security-opt=no-new-privileges",
+            "--cap-drop=ALL",
+            "--tmpfs",
+            "/tmp:rw,noexec,nosuid,size=64m",
+            "--user",
+            "65532:65532",
+            f"--memory={self.memory}",
+            f"--cpus={self.cpus}",
+            "-v",
+            f"{workspace}:/workspace:rw",
+            "-w",
+            "/workspace",
+            self.image,
+            "python",
+            "/workspace/main.py",
+        ]
+        try:
+            completed = self.command_runner(command, timeout_seconds)
+        except subprocess.TimeoutExpired as exc:
+            raise SandboxProviderError(f"Docker gVisor sandbox timed out after {timeout_seconds}s") from exc
+        except OSError as exc:
+            raise SandboxProviderError(f"Docker gVisor sandbox failed to start: {exc}") from exc
+
+        return SandboxResult(exit_code=completed.returncode, stdout=completed.stdout, stderr=completed.stderr)
+
+    @staticmethod
+    def _run_subprocess(command: list[str], timeout_seconds: int) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            command,
+            timeout=timeout_seconds,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
 
 
 @dataclass

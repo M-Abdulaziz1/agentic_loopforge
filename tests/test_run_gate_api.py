@@ -106,3 +106,27 @@ def test_gate_contract_lists_and_decides_pending_gates() -> None:
     assert decided.json()["note"] == "Looks good"
     assert decide_again.status_code == 409
     assert decide_again.json() == {"detail": "Gate already decided"}
+
+
+def test_approving_gate_resumes_run_and_records_execution_events() -> None:
+    client = TestClient(create_app())
+    goal_id, spec_id = create_approved_spec(client)
+    run = client.post(f"/api/goals/{goal_id}/runs", json={"loop_spec_id": spec_id}).json()
+    gate = client.get("/api/gates", params={"status": "pending", "run_id": run["id"]}).json()[0]
+
+    decided = client.post(f"/api/gates/{gate['id']}/decision", json={"decision": "approve"})
+    updated_run = client.get(f"/api/runs/{run['id']}")
+    events = client.get(f"/api/runs/{run['id']}/events", headers={"Accept": "application/json"}).json()
+
+    assert decided.status_code == 200
+    assert updated_run.status_code == 200
+    assert updated_run.json()["status"] == "completed"
+    assert [event["type"] for event in events] == [
+        "node_start",
+        "gate_pending",
+        "run_status",
+        "llm_call",
+        "cost_update",
+        "node_end",
+        "run_status",
+    ]

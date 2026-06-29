@@ -2,38 +2,61 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
+import sqlite3
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from api.loopforge.domain import (
+    Artifact,
+    AuditEvent,
     ClarificationAnswer,
     ClarificationResult,
     ClarificationSession,
     ClarificationStatus,
+    ContextEntry,
+    ContextPack,
     Gate,
     GateDecision,
     GateStatus,
     Goal,
     GoalCreate,
     GoalCreateResult,
+    InsightResult,
     LoopSpec,
     LoopSpecUpdate,
+    ModelResult,
+    Results,
+    ResultsSummary,
     Run,
+    RunContext,
     RunEvent,
     RunStartRequest,
     RunStatus,
     now_utc,
 )
+from api.loopforge.context import ContextManager
 from api.loopforge.planner import LoopPlanner
-from api.loopforge.providers import FakeLLMProvider, FakeSandboxProvider
 from api.loopforge.runner import LoopRunner
-from api.loopforge.store import InMemoryStore
+from api.loopforge.runtime import create_llm_provider, create_sandbox_provider
+from api.loopforge.settings import Settings
+from api.loopforge.sqlite_store import SQLiteStore
+from api.loopforge.store import InMemoryStore, Store
 from api.loopforge.tools import default_tool_registry
 
 
-def create_app() -> FastAPI:
+def create_store(settings: Settings) -> Store:
+    try:
+        return SQLiteStore(settings.storage_path)
+    except (OSError, sqlite3.Error):
+        if settings.storage_path != Settings().storage_path:
+            raise
+        return InMemoryStore()
+
+
+def create_app(store: Store | None = None, settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="LoopForge")
     app.add_middleware(
         CORSMiddleware,
@@ -42,10 +65,11 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    store = InMemoryStore()
-    llm = FakeLLMProvider()
+    settings = settings or Settings()
+    store = store or InMemoryStore()
+    llm = create_llm_provider(settings)
     planner = LoopPlanner(llm=llm)
-    sandbox = FakeSandboxProvider()
+    sandbox = create_sandbox_provider(settings)
     tools = default_tool_registry()
 
     @app.get("/api/goals")
@@ -60,9 +84,11 @@ def create_app() -> FastAPI:
         store.save_goal(goal)
         if clarity.session is not None:
             session = store.save_clarification(clarity.session)
+            _audit(store, "goal.create", "goal", goal.id, {"status": goal.status})
             return GoalCreateResult(goal=goal, clarification=session, loop_spec=None)
 
         spec = store.save_loop_spec(planner.generate_spec(goal))
+        _audit(store, "goal.create", "goal", goal.id, {"status": goal.status, "loop_spec_id": spec.id})
         return GoalCreateResult(goal=goal, clarification=None, loop_spec=spec)
 
     @app.get("/api/goals/{goalId}")
@@ -147,7 +173,9 @@ def create_app() -> FastAPI:
         if spec.status != "draft":
             raise HTTPException(status_code=409, detail="Loop spec is not in an approvable state")
         approved = spec.model_copy(update={"status": "approved"})
-        return store.save_loop_spec(approved)
+        approved = store.save_loop_spec(approved)
+        _audit(store, "loop_spec.approve", "loop_spec", spec.id, {"goal_id": spec.goal_id})
+        return approved
 
     @app.post("/api/goals/{goalId}/runs", status_code=201)
     def start_run(goalId: str, payload: RunStartRequest) -> Run:
@@ -161,7 +189,9 @@ def create_app() -> FastAPI:
         if spec.status != "approved":
             raise HTTPException(status_code=409, detail="Loop spec must be approved before running")
         runner = LoopRunner(store=store, llm=llm, sandbox=sandbox, tools=tools)
-        return runner.start(goal, spec)
+        run = runner.start(goal, spec)
+        _audit(store, "run.start", "run", run.id, {"goal_id": goal.id, "loop_spec_id": spec.id, "status": run.status})
+        return run
 
     @app.get("/api/runs")
     def list_runs() -> list[Run]:
@@ -221,6 +251,40 @@ def create_app() -> FastAPI:
 
         return StreamingResponse(event_stream(), media_type="text/event-stream")
 
+    @app.get("/api/runs/{runId}/artifacts")
+    def list_artifacts(runId: str) -> list[Artifact]:
+        try:
+            store.get_run(runId)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Run not found") from exc
+        return [_sanitize_artifact(artifact) for artifact in store.list_artifacts(runId)]
+
+    @app.get("/api/runs/{runId}/results")
+    def get_results(runId: str) -> Results:
+        try:
+            run = store.get_run(runId)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Run not found") from exc
+        return _assemble_results(run, store.list_artifacts(runId))
+
+    @app.get("/api/runs/{runId}/context")
+    def get_run_context(runId: str) -> RunContext:
+        try:
+            run = store.get_run(runId)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Run not found") from exc
+        ledger = store.list_context(runId)
+        max_tokens = 8000
+        try:
+            max_tokens = store.get_goal(run.goal_id).budget.max_context_tokens
+        except KeyError:
+            pass
+        pack = ContextManager(max_tokens=max_tokens).build_pack(ledger, task="inspect run context", required_tags=["required"])
+        return RunContext(
+            ledger=[_sanitize_context_entry(entry) for entry in ledger],
+            pack=_sanitize_context_pack(pack),
+        )
+
     @app.get("/api/gates")
     def list_gates(status: GateStatus | None = None, run_id: str | None = None) -> list[Gate]:
         return store.list_gates(status=status, run_id=run_id)
@@ -238,6 +302,13 @@ def create_app() -> FastAPI:
         status = GateStatus.APPROVED if payload.decision == "approve" else GateStatus.REJECTED
         decided = gate.model_copy(update={"status": status, "note": payload.note})
         store.save_gate(decided)
+        _audit(
+            store,
+            "gate.decision",
+            "gate",
+            gate.id,
+            {"decision": payload.decision, "note": payload.note, "run_id": gate.run_id},
+        )
 
         if status == GateStatus.REJECTED:
             updated_run = run.model_copy(update={"status": RunStatus.CANCELLED, "ended_at": now_utc()})
@@ -246,15 +317,13 @@ def create_app() -> FastAPI:
             return decided
 
         if all(existing.status == GateStatus.APPROVED for existing in store.list_gates(run_id=run.id)):
-            completed = run.model_copy(
-                update={
-                    "status": RunStatus.COMPLETED,
-                    "result_summary": "Loop completed after gate approval.",
-                    "ended_at": now_utc(),
-                }
-            )
-            store.save_run(completed)
-            _append_run_status_event(store, completed, "Run completed after gate approval", {"status": completed.status, "gate_id": gate.id})
+            try:
+                goal = store.get_goal(run.goal_id)
+                spec = store.get_loop_spec(run.loop_spec_id)
+            except KeyError as exc:
+                raise HTTPException(status_code=404, detail="Run goal or loop spec not found") from exc
+            runner = LoopRunner(store=store, llm=llm, sandbox=sandbox, tools=tools)
+            runner.resume_after_gate(run, goal, spec)
         return decided
 
     return app
@@ -283,7 +352,7 @@ def _validate_loop_spec(goal: Goal, spec: LoopSpec) -> None:
             raise HTTPException(status_code=422, detail=f"Handoff target agent not found: {target}")
 
 
-def _append_run_status_event(store: InMemoryStore, run: Run, message: str, payload: dict[str, object]) -> RunEvent:
+def _append_run_status_event(store: Store, run: Run, message: str, payload: dict[str, object]) -> RunEvent:
     return store.append_event(
         RunEvent(
             run_id=run.id,
@@ -293,6 +362,104 @@ def _append_run_status_event(store: InMemoryStore, run: Run, message: str, paylo
             payload=payload,
         )
     )
+
+
+def _audit(store: Store, action: str, subject_type: str, subject_id: str, payload: dict[str, object]) -> AuditEvent:
+    return store.append_audit_event(
+        AuditEvent(
+            action=action,
+            subject_type=subject_type,
+            subject_id=subject_id,
+            payload=payload,
+        )
+    )
+
+
+def _assemble_results(run: Run, artifacts: list[Artifact]) -> Results:
+    insights: list[InsightResult] = []
+    models: list[ModelResult] = []
+    rejected = 0
+
+    for artifact in artifacts:
+        metadata = _sanitize_value(artifact.metadata)
+        if artifact.kind == "insight":
+            if bool(metadata.get("passed")):
+                insights.append(
+                    InsightResult(
+                        id=artifact.id,
+                        rank=len(insights) + 1,
+                        claim=str(metadata["claim"]),
+                        passed=True,
+                        test=str(metadata["test"]),
+                        p_value=float(metadata["p_value"]),
+                        effect_name=str(metadata["effect_name"]),
+                        effect_value=float(metadata["effect_value"]),
+                        n=int(metadata["n"]),
+                        correction=metadata.get("correction"),
+                        plot_ref=metadata.get("plot_ref"),
+                    )
+                )
+            else:
+                rejected += 1
+        elif artifact.kind == "model":
+            if bool(metadata.get("beats_baseline")) and bool(metadata.get("leakage_ok")):
+                models.append(
+                    ModelResult(
+                        id=artifact.id,
+                        name=str(metadata["name"]),
+                        metric_name=str(metadata["metric_name"]),
+                        metric_value=float(metadata["metric_value"]),
+                        baseline_name=str(metadata["baseline_name"]),
+                        baseline_value=float(metadata["baseline_value"]),
+                        beats_baseline=True,
+                        leakage_ok=True,
+                    )
+                )
+            else:
+                rejected += 1
+
+    duration_s = None
+    if run.started_at is not None and run.ended_at is not None:
+        duration_s = (run.ended_at - run.started_at).total_seconds()
+    return Results(
+        run_id=run.id,
+        status=run.status,
+        summary=ResultsSummary(
+            validated=len(insights) + len(models),
+            rejected=rejected,
+            cost_usd=run.spent_usd,
+            duration_s=duration_s,
+        ),
+        insights=insights,
+        models=models,
+    )
+
+
+def _sanitize_artifact(artifact: Artifact) -> Artifact:
+    return artifact.model_copy(update={"metadata": _sanitize_value(artifact.metadata)})
+
+
+def _sanitize_context_pack(pack: ContextPack) -> ContextPack:
+    return pack.model_copy(update={"entries": [_sanitize_context_entry(entry) for entry in pack.entries], "summary": _sanitize_text(pack.summary)})
+
+
+def _sanitize_context_entry(entry: ContextEntry) -> ContextEntry:
+    return entry.model_copy(update={"text": _sanitize_text(entry.text)})
+
+
+def _sanitize_value(value):
+    if isinstance(value, str):
+        return _sanitize_text(value)
+    if isinstance(value, list):
+        return [_sanitize_value(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _sanitize_value(item) for key, item in value.items()}
+    return value
+
+
+def _sanitize_text(text: str) -> str:
+    text = re.sub(r"\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b", "[REDACTED_EMAIL]", text)
+    return re.sub(r"\b\d{3}-\d{2}-\d{4}\b", "[REDACTED_SSN]", text)
 
 
 def _is_terminal(status: RunStatus) -> bool:
@@ -306,4 +473,5 @@ def _is_terminal(status: RunStatus) -> bool:
     }
 
 
-app = create_app()
+_settings = Settings.from_env()
+app = create_app(store=create_store(_settings), settings=_settings)

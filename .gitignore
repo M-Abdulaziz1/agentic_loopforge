@@ -1,4 +1,5 @@
 .superpowers/
+.loopforge/
 .env
 .env.*
 !.env.example
