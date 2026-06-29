@@ -1,16 +1,38 @@
+import { lazy } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppLayout } from "../components/shell/AppLayout";
 import { Placeholder } from "../pages/Placeholder";
-import { GoalCreatePage } from "../pages/GoalCreatePage";
-import { ClarificationPage } from "../pages/ClarificationPage";
-import { LoopSpecPage } from "../pages/LoopSpecPage";
-import { RunPage } from "../pages/RunPage";
-import { GateInboxPage } from "../pages/GateInboxPage";
-import { ResultsPage } from "../pages/ResultsPage";
-import { RunsListPage } from "../pages/RunsListPage";
-import { ContextPage } from "../pages/ContextPage";
-import { LoopBuilderPage } from "../pages/LoopBuilderPage";
-import { TemplatesPage } from "../pages/TemplatesPage";
+
+// Heavy/route-level pages are code-split so the initial bundle stays small.
+// (The React Flow pages — Run view, Loop Builder — only load when visited.)
+const GoalCreatePage = lazy(() =>
+  import("../pages/GoalCreatePage").then((m) => ({ default: m.GoalCreatePage })),
+);
+const ClarificationPage = lazy(() =>
+  import("../pages/ClarificationPage").then((m) => ({ default: m.ClarificationPage })),
+);
+const LoopSpecPage = lazy(() =>
+  import("../pages/LoopSpecPage").then((m) => ({ default: m.LoopSpecPage })),
+);
+const LoopBuilderPage = lazy(() =>
+  import("../pages/LoopBuilderPage").then((m) => ({ default: m.LoopBuilderPage })),
+);
+const TemplatesPage = lazy(() =>
+  import("../pages/TemplatesPage").then((m) => ({ default: m.TemplatesPage })),
+);
+const RunPage = lazy(() => import("../pages/RunPage").then((m) => ({ default: m.RunPage })));
+const RunsListPage = lazy(() =>
+  import("../pages/RunsListPage").then((m) => ({ default: m.RunsListPage })),
+);
+const ResultsPage = lazy(() =>
+  import("../pages/ResultsPage").then((m) => ({ default: m.ResultsPage })),
+);
+const ContextPage = lazy(() =>
+  import("../pages/ContextPage").then((m) => ({ default: m.ContextPage })),
+);
+const GateInboxPage = lazy(() =>
+  import("../pages/GateInboxPage").then((m) => ({ default: m.GateInboxPage })),
+);
 
 export function AppRoutes() {
   return (

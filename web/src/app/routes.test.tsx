@@ -3,7 +3,7 @@ import { MemoryRouter } from "react-router-dom";
 import { Providers } from "./Providers";
 import { AppRoutes } from "./routes";
 
-test("renders the Runs page heading at /runs", () => {
+test("renders the Runs page heading at /runs", async () => {
   render(
     <Providers>
       <MemoryRouter initialEntries={["/runs"]}>
@@ -11,10 +11,10 @@ test("renders the Runs page heading at /runs", () => {
       </MemoryRouter>
     </Providers>,
   );
-  expect(screen.getByRole("heading", { name: "Runs" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Runs" })).toBeInTheDocument();
 });
 
-test("redirects / to Goals", () => {
+test("redirects / to Goals", async () => {
   render(
     <Providers>
       <MemoryRouter initialEntries={["/"]}>
@@ -22,5 +22,5 @@ test("redirects / to Goals", () => {
       </MemoryRouter>
     </Providers>,
   );
-  expect(screen.getByRole("heading", { name: "Goals" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Goals" })).toBeInTheDocument();
 });
