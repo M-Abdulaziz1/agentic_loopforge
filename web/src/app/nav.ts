@@ -7,6 +7,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Goals", to: "/goals", icon: "✦" },
       { label: "Loop Specs", to: "/specs", icon: "❖" },
+      { label: "Templates", to: "/templates", icon: "⧉" },
     ],
   },
   {

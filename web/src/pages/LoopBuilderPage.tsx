@@ -16,6 +16,7 @@ import "reactflow/dist/style.css";
 import { AgentNode } from "../components/run/AgentNode";
 import { NodeConfigPanel } from "../components/run/NodeConfigPanel";
 import { useLoopSpec, useUpdateLoopSpec } from "../lib/api/loopspecs";
+import { useCreateTemplate } from "../lib/api/templates";
 import { useGoal } from "../lib/api/goals";
 import { validateLoopGraph } from "../lib/validateLoopGraph";
 import type { AgentNodeData } from "../lib/buildAgentFlow";
@@ -32,6 +33,7 @@ export function LoopBuilderPage() {
   const update = useUpdateLoopSpec(specId);
 
   const { data: goal } = useGoal(spec?.goal_id ?? "");
+  const createTemplate = useCreateTemplate();
   const [nodes, setNodes, onNodesChange] = useNodesState<BuilderNodeData>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -113,6 +115,11 @@ export function LoopBuilderPage() {
     setNodes((ns) => [...ns, node]);
   }
 
+  async function saveAsTemplate() {
+    await createTemplate.mutateAsync({ name: `Template — ${spec?.id ?? specId}`, spec_id: specId });
+    navigate("/templates");
+  }
+
   async function save() {
     if (errors.length > 0) return;
     const agents: LoopSpecAgent[] = nodes.map((n) => ({
@@ -141,6 +148,14 @@ export function LoopBuilderPage() {
           className="rounded-xl border border-[var(--line2)] bg-[var(--glass2)] px-4 py-2 text-[13px] font-semibold"
         >
           + Add agent
+        </button>
+        <button
+          type="button"
+          onClick={saveAsTemplate}
+          disabled={createTemplate.isPending}
+          className="rounded-xl border border-[var(--line2)] bg-[var(--glass2)] px-4 py-2 text-[13px] font-semibold disabled:opacity-50"
+        >
+          ⧉ Save as template
         </button>
         <button
           type="button"

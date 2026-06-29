@@ -4,6 +4,7 @@ import type {
   Gate,
   Goal,
   LoopSpec,
+  LoopTemplate,
   Results,
   Run,
   RunContext,
@@ -186,4 +187,19 @@ export const sampleRunContext: RunContext = {
     { id: "ctx_3", run_id: "run_a91c", kind: "tool", text: "sandbox.exec → correlation matrix computed (14×14).", tags: ["eda", "artifact"], source_event_id: "evt_4", token_count: 340, created_at: "2026-06-27T12:04:23Z" },
   ],
   pack: { entries: [], summary: "Goal + approved requirements + durable summaries + recent events.", token_count: 3100, overflow: false },
+};
+
+export const sampleTemplate: LoopTemplate = {
+  id: "tpl_churn",
+  name: "Churn analysis loop",
+  description: "Plan → analyst → validator → reporter for tabular churn drivers.",
+  agents: sampleLoopSpec.agents,
+  tool_permissions: sampleLoopSpec.tool_permissions,
+  handoffs: sampleLoopSpec.handoffs,
+  success_criteria: sampleLoopSpec.success_criteria,
+  failure_criteria: sampleLoopSpec.failure_criteria,
+  gates: sampleLoopSpec.gates,
+  context_policy: sampleLoopSpec.context_policy,
+  improvement_strategy: sampleLoopSpec.improvement_strategy,
+  created_at: "2026-06-29T09:00:00Z",
 };
