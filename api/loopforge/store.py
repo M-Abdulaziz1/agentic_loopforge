@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from api.loopforge.domain import Artifact, AuditEvent, ClarificationSession, ContextEntry, Gate, GateStatus, Goal, LoopSpec, Run, RunEvent
+from api.loopforge.domain import Artifact, AuditEvent, ClarificationSession, ContextEntry, Gate, GateStatus, Goal, LoopSpec, LoopTemplate, Run, RunEvent
 
 
 class Store(Protocol):
@@ -14,6 +14,10 @@ class Store(Protocol):
     def save_loop_spec(self, spec: LoopSpec) -> LoopSpec: ...
     def get_loop_spec(self, spec_id: str) -> LoopSpec: ...
     def list_loop_specs(self, goal_id: str | None = None) -> list[LoopSpec]: ...
+    def save_template(self, template: LoopTemplate) -> LoopTemplate: ...
+    def get_template(self, template_id: str) -> LoopTemplate: ...
+    def list_templates(self) -> list[LoopTemplate]: ...
+    def delete_template(self, template_id: str) -> None: ...
     def save_run(self, run: Run) -> Run: ...
     def get_run(self, run_id: str) -> Run: ...
     def list_runs(self) -> list[Run]: ...
@@ -34,6 +38,7 @@ class InMemoryStore:
     def __init__(self) -> None:
         self.goals: dict[str, Goal] = {}
         self.loop_specs: dict[str, LoopSpec] = {}
+        self.templates: dict[str, LoopTemplate] = {}
         self.runs: dict[str, Run] = {}
         self.events: dict[str, list[RunEvent]] = {}
         self.artifacts: dict[str, list[Artifact]] = {}
@@ -71,6 +76,19 @@ class InMemoryStore:
         if goal_id is not None:
             specs = [spec for spec in specs if spec.goal_id == goal_id]
         return sorted(specs, key=lambda spec: spec.created_at, reverse=True)
+
+    def save_template(self, template: LoopTemplate) -> LoopTemplate:
+        self.templates[template.id] = template
+        return template
+
+    def get_template(self, template_id: str) -> LoopTemplate:
+        return self.templates[template_id]
+
+    def list_templates(self) -> list[LoopTemplate]:
+        return sorted(self.templates.values(), key=lambda template: template.created_at, reverse=True)
+
+    def delete_template(self, template_id: str) -> None:
+        del self.templates[template_id]
 
     def save_run(self, run: Run) -> Run:
         self.runs[run.id] = run

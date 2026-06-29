@@ -7,7 +7,7 @@ from typing import TypeVar
 
 from pydantic import BaseModel
 
-from api.loopforge.domain import Artifact, AuditEvent, ClarificationSession, ContextEntry, Gate, GateStatus, Goal, LoopSpec, Run, RunEvent
+from api.loopforge.domain import Artifact, AuditEvent, ClarificationSession, ContextEntry, Gate, GateStatus, Goal, LoopSpec, LoopTemplate, Run, RunEvent
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
 
@@ -66,6 +66,23 @@ class SQLiteStore:
     def list_loop_specs(self, goal_id: str | None = None) -> list[LoopSpec]:
         specs = self._list("loop_spec", LoopSpec, goal_id=goal_id)
         return sorted(specs, key=lambda spec: spec.created_at, reverse=True)
+
+    def save_template(self, template: LoopTemplate) -> LoopTemplate:
+        self._save("template", template)
+        return template
+
+    def get_template(self, template_id: str) -> LoopTemplate:
+        return self._get("template", template_id, LoopTemplate)
+
+    def list_templates(self) -> list[LoopTemplate]:
+        return sorted(self._list("template", LoopTemplate), key=lambda template: template.created_at, reverse=True)
+
+    def delete_template(self, template_id: str) -> None:
+        with self._lock:
+            cursor = self._connection.execute("DELETE FROM records WHERE kind = ? AND id = ?", ("template", template_id))
+            self._connection.commit()
+        if cursor.rowcount == 0:
+            raise KeyError(template_id)
 
     def save_run(self, run: Run) -> Run:
         self._save("run", run, goal_id=run.goal_id)

@@ -27,6 +27,9 @@ from api.loopforge.domain import (
     InsightResult,
     LoopSpec,
     LoopSpecUpdate,
+    LoopTemplate,
+    LoopTemplateCreate,
+    LoopTemplateInstantiate,
     ModelResult,
     Results,
     ResultsSummary,
@@ -176,6 +179,68 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
         approved = store.save_loop_spec(approved)
         _audit(store, "loop_spec.approve", "loop_spec", spec.id, {"goal_id": spec.goal_id})
         return approved
+
+    @app.get("/api/templates")
+    def list_templates() -> list[LoopTemplate]:
+        return store.list_templates()
+
+    @app.post("/api/templates", status_code=201)
+    def create_template(payload: LoopTemplateCreate) -> LoopTemplate:
+        try:
+            spec = store.get_loop_spec(payload.spec_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Loop spec not found") from exc
+
+        template = LoopTemplate(
+            name=payload.name,
+            description=payload.description,
+            agents=spec.agents,
+            tool_permissions=spec.tool_permissions,
+            handoffs=spec.handoffs,
+            success_criteria=spec.success_criteria,
+            failure_criteria=spec.failure_criteria,
+            gates=spec.gates,
+            context_policy=spec.context_policy,
+            improvement_strategy=spec.improvement_strategy,
+        )
+        saved = store.save_template(template)
+        _audit(store, "template.create", "template", saved.id, {"spec_id": payload.spec_id})
+        return saved
+
+    @app.post("/api/templates/{templateId}/instantiate", status_code=201)
+    def instantiate_template(templateId: str, payload: LoopTemplateInstantiate) -> LoopSpec:
+        try:
+            template = store.get_template(templateId)
+            goal = store.get_goal(payload.goal_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Template or goal not found") from exc
+
+        spec = LoopSpec(
+            goal_id=goal.id,
+            version=1,
+            agents=template.agents,
+            tool_permissions=template.tool_permissions,
+            handoffs=template.handoffs,
+            success_criteria=template.success_criteria,
+            failure_criteria=template.failure_criteria,
+            gates=template.gates,
+            context_policy=template.context_policy,
+            improvement_strategy=template.improvement_strategy,
+            status="draft",
+        )
+        _validate_loop_spec(goal, spec)
+        saved = store.save_loop_spec(spec)
+        _audit(store, "template.instantiate", "template", template.id, {"goal_id": goal.id, "loop_spec_id": saved.id})
+        return saved
+
+    @app.delete("/api/templates/{templateId}", status_code=204)
+    def delete_template(templateId: str) -> None:
+        try:
+            store.delete_template(templateId)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Template not found") from exc
+        _audit(store, "template.delete", "template", templateId, {})
+        return None
 
     @app.post("/api/goals/{goalId}/runs", status_code=201)
     def start_run(goalId: str, payload: RunStartRequest) -> Run:
