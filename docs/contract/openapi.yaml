@@ -351,6 +351,67 @@ paths:
               schema: { $ref: "#/components/schemas/RunContext" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /api/templates:
+    get:
+      operationId: listTemplates
+      summary: List saved loop templates
+      responses:
+        "200":
+          description: Templates
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/LoopTemplate" }
+    post:
+      operationId: createTemplate
+      summary: Save a loop spec as a reusable template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoopTemplateCreate" }
+      responses:
+        "201":
+          description: Template created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoopTemplate" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/templates/{templateId}:
+    parameters:
+      - { name: templateId, in: path, required: true, schema: { type: string } }
+    delete:
+      operationId: deleteTemplate
+      summary: Delete a template
+      responses:
+        "204": { description: Deleted }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/templates/{templateId}/instantiate:
+    parameters:
+      - { name: templateId, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: instantiateTemplate
+      summary: Create a new draft loop spec from a template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [goal_id]
+              properties:
+                goal_id: { type: string }
+      responses:
+        "201":
+          description: New draft loop spec
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoopSpec" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
 components:
   responses:
     NotFound:
@@ -714,3 +775,41 @@ components:
           type: array
           items: { $ref: "#/components/schemas/ContextEntry" }
         pack: { $ref: "#/components/schemas/ContextPack" }
+
+    LoopTemplate:
+      type: object
+      required:
+        [id, name, agents, tool_permissions, handoffs, success_criteria,
+         failure_criteria, gates, context_policy, improvement_strategy, created_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description:
+          anyOf: [{ type: string }, { type: "null" }]
+        agents:
+          type: array
+          items: { $ref: "#/components/schemas/LoopSpecAgent" }
+        tool_permissions:
+          type: array
+          items: { $ref: "#/components/schemas/ToolPermission" }
+        handoffs:
+          type: array
+          items:
+            type: object
+            additionalProperties: { type: string }
+        success_criteria: { type: array, items: { type: string } }
+        failure_criteria: { type: array, items: { type: string } }
+        gates: { type: array, items: { type: string } }
+        context_policy: { type: object, additionalProperties: true }
+        improvement_strategy: { type: string }
+        created_at: { type: string, format: date-time }
+
+    LoopTemplateCreate:
+      type: object
+      required: [name, spec_id]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        spec_id:
+          type: string
+          description: Loop spec to snapshot into the template.

@@ -200,4 +200,30 @@ implemented in the Plan 2/3 pass.
 - **2026-06-28 — reconcile gVisor (decision: best-of-both).** Adopt Codex's `be/plan-2`
   provider base; port the writable-`/workspace` + `--cap-drop=ALL` fixes into it (item 1
   above). The duplicate local WIP (`runtime.py` `build_*`, WIP `providers.py`/tests) is
-  dropped at merge.
+  dropped at merge. **DONE** — merged to `main` (47e8b64); parity verified.
+
+---
+
+# Codex brief — backend, Plan 4 (Templates)
+
+`be/plan-2` is merged to `main`. Start the next slice from `main`:
+`git -C ../loopforge-be checkout main -- docs/contract/` (or `git merge main`).
+
+Implement the template endpoints now in `openapi.yaml`:
+
+1. `GET /api/templates` — list saved `LoopTemplate`s.
+2. `POST /api/templates` — body `LoopTemplateCreate {name, description?, spec_id}`; snapshot
+   the named loop spec's agents/tools/handoffs/criteria/gates/policies into a `LoopTemplate`
+   (no `goal_id`). 404 if `spec_id` unknown.
+3. `POST /api/templates/{id}/instantiate` — body `{goal_id}`; create a **new draft `LoopSpec`**
+   (status `draft`, version 1) bound to that goal from the template. 404 if either unknown.
+4. `DELETE /api/templates/{id}` → 204.
+
+Persist templates in the SQLite store like other entities. Tests per endpoint;
+`pytest tests/ -q`. **Loop Spec "Reject" is STILL pending the arbiter — do not implement.**
+
+## Contract change log
+
+- **2026-06-29 — add Templates slice (Plan 4).** Added `GET/POST /api/templates`,
+  `POST /api/templates/{id}/instantiate`, `DELETE /api/templates/{id}` and `LoopTemplate`,
+  `LoopTemplateCreate` schemas.
