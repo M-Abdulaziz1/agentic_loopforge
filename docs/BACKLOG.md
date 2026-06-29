@@ -1,8 +1,13 @@
 # LoopForge backlog (outstanding work)
 
-## Plan 4 — Visual Loop Builder (UNFINISHED)
+## Plan 4 — Visual Loop Builder (FRONTEND DONE — backend pending)
 
-Deferred; not yet started. Editable React Flow canvas to compose/alter a loop:
+Frontend complete on `fe/plan-4`: graph validator, editable React Flow builder
+(`/specs/:id/edit`), node config panel (capability locks), Templates page + save/instantiate.
+**Remaining:** Codex to implement the templates backend (`GET/POST /api/templates`,
+`POST /api/templates/{id}/instantiate`, `DELETE`) per the contract; then merge `fe/plan-4`.
+
+Original scope (for reference) — editable React Flow canvas to compose/alter a loop:
 
 - Editable canvas (add/remove/connect agent + gate nodes), reusing the Run view node
   components; auto-layout for the generated spec.
