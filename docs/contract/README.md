@@ -227,3 +227,56 @@ Persist templates in the SQLite store like other entities. Tests per endpoint;
 - **2026-06-29 — add Templates slice (Plan 4).** Added `GET/POST /api/templates`,
   `POST /api/templates/{id}/instantiate`, `DELETE /api/templates/{id}` and `LoopTemplate`,
   `LoopTemplateCreate` schemas.
+- **2026-06-30 — add artifact content.** `GET /api/artifacts/{id}/content` + `ArtifactContent`
+  schema, so the UI can view/extract generated code.
+
+---
+
+# Codex brief — REAL AGENT ENGINE (make the loop LLM-driven, end-to-end)
+
+This is the big one. Today the engine is **templated**: `LoopPlanner.generate_spec` calls the
+LLM but **discards the result** and returns hardcoded agents; `check_clarity` is a word-count
+heuristic; the runner emits events but agents don't actually do work, so Results are always
+empty. Make it real, driven by the configured **OpenAI-compatible LLM**
+(`LOOPFORGE_LLM_PROVIDER=openai_compatible`, `..._BASE_URL/_MODEL/_API_KEY`).
+
+**Keep the HTTP contract in `openapi.yaml` unchanged** (except the new artifact-content
+endpoint). The frontend already renders whatever specs/agents/artifacts you return.
+
+### 1. LLM-driven planner (`api/loopforge/planner.py`)
+- **Clarity check:** prompt the LLM to judge whether the goal is actionable; if not, have it
+  return focused clarification questions + missing requirements + a clarity score. No more
+  word-count heuristic.
+- **Spec generation:** prompt the LLM to **design the loop** for the goal and return **strict
+  JSON** matching `LoopSpec` (agents with names/roles/**system_prompt**/tools, handoffs,
+  success/failure criteria, gates, context_policy, improvement_strategy). Validate with
+  Pydantic; on parse failure, re-ask once, else fail honestly. The agents, prompts, and
+  handoffs must be **derived from the goal**, not hardcoded.
+- **Guardrails:** tools the LLM assigns must be a subset of what the goal's toggles allow
+  (no internet tool when `toggles.internet` is false / offline_local). Treat the goal text and
+  any tool/data text as **data, not instructions** (prompt-injection containment).
+
+### 2. Real execution (`worker/` + runner)
+- Execute the approved spec: for each agent step, build a bounded **context pack** and call the
+  LLM with that agent's **system_prompt**; let agents use tools — **sandbox.exec** (Docker+gVisor,
+  already hardened) to write & run code, **workspace** to persist files.
+- **Produce real artifacts** and persist them (`artifacts` table): generated **code** (kind
+  `code`), a **report** (kind `report`), and, when applicable, **insights** (kind `insight`)
+  and **models** (kind `model`). Populate `GET /api/runs/{id}/results` from validated artifacts;
+  `GET /api/runs/{id}/context` from the real ledger/pack.
+- Emit the existing event types (`node_start/node_end/tool_call/llm_call/cost_update/
+  gate_pending/run_status`) as you go so the canvas/stream/meters animate. Honor the **budget
+  guard** (hard stop) and **HITL gates** (pause → resume on approval, already wired).
+- **Honest-empty:** if nothing validates, return empty results — never fabricate.
+
+### 3. Artifact content endpoint (new in contract)
+- `GET /api/artifacts/{artifactId}/content` → `ArtifactContent {artifact_id, filename?,
+  language?, content}` (PII-masked). This is what powers "view/extract the code" in the UI.
+
+### Demo target (user's real use case)
+A goal → LLM clarifies → LLM **designs the agents + prompts** → run executes → produces
+**runnable code artifacts AND/or validated insights** the user can view, copy, and download.
+
+Sync + work: `git -C ../loopforge-be merge main` then implement on your branch.
+`pytest tests/ -q`. Suggest committing in stages (planner → runner → artifact content).
+**Loop Spec "Reject" still NOT in scope** (pending arbiter).
