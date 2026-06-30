@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { cn } from "../lib/cn";
 import { useClarification, useSubmitAnswer } from "../lib/api/clarification";
 
 export function ClarificationPage() {
@@ -14,7 +13,21 @@ export function ClarificationPage() {
     () => new Set((session?.answers ?? []).map((a) => a.question_id)),
     [session],
   );
-  const current = session?.questions.find((q) => !answeredIds.has(q.id));
+
+  if (isLoading || !session) {
+    return <div className="p-8 text-mut">Loading clarification…</div>;
+  }
+
+  const questions = session.questions;
+  const answeredQuestions = questions.filter((q) => answeredIds.has(q.id));
+  const current = questions.find((q) => !answeredIds.has(q.id));
+  const currentNumber = current
+    ? questions.findIndex((q) => q.id === current.id) + 1
+    : questions.length;
+  const pct = Math.round(session.clarity_score * 100);
+  const currentOptions = current?.options ?? [];
+  const answerFor = (qid: string) =>
+    session.answers.find((a) => a.question_id === qid)?.answer;
 
   async function sendAnswer(value: string) {
     if (!current || value.trim().length === 0) return;
@@ -27,184 +40,126 @@ export function ClarificationPage() {
     }
   }
 
-  if (isLoading || !session) {
-    return <div className="p-8 text-mut">Loading clarification…</div>;
-  }
-
-  const answerFor = (qid: string) =>
-    session.answers.find((a) => a.question_id === qid)?.answer;
-  const doneReqs = session.questions
-    .filter((q) => answeredIds.has(q.id))
-    .map((q) => q.missing_requirement);
-  const pct = Math.round(session.clarity_score * 100);
-  // Tolerate older sessions / backends that don't include options.
-  const currentOptions = current?.options ?? [];
-
   return (
     <div className="flex min-h-screen flex-col">
       <div className="flex items-center gap-3 border-b border-[var(--line)] px-7 py-4 text-sm text-mut">
         Goals / <b className="text-ink">Clarification</b>
         <span className="ml-auto rounded-full border border-[rgba(255,209,102,.35)] bg-[rgba(255,209,102,.15)] px-2.5 py-1 text-[11px] font-semibold text-[#ffe2a0]">
-          {session.status === "ready"
-            ? "ready"
-            : `needs_clarification · ${session.questions.length - answeredIds.size} left`}
+          {current
+            ? `needs_clarification · ${questions.length - answeredQuestions.length} left`
+            : "ready"}
         </span>
       </div>
 
-      <div className="grid flex-1 grid-cols-[1fr_340px] overflow-hidden">
-        {/* chat */}
-        <div className="flex min-h-0 flex-col border-r border-[var(--line)]">
-          <div className="flex flex-1 flex-col gap-[18px] overflow-auto px-7 py-6">
-            {session.questions.map((q) => (
-              <div key={q.id} className="flex flex-col gap-[18px]">
-                <Bubble who="maker">
-                  <div className="mb-2 inline-block rounded-md border border-[rgba(255,209,102,.3)] bg-[rgba(255,209,102,.14)] px-1.5 py-px text-[10px] font-bold tracking-wide text-[#ffe2a0]">
-                    CLARIFY · {q.missing_requirement.toUpperCase()}
-                  </div>
-                  <div className="font-semibold text-white">{q.question}</div>
-                </Bubble>
-                {answerFor(q.id) ? <Bubble who="user">{answerFor(q.id)}</Bubble> : null}
-              </div>
-            ))}
+      <div className="flex-1 overflow-auto">
+        <div className="mx-auto max-w-[640px] px-7 py-8">
+          {/* progress */}
+          <div className="mb-6 flex items-center gap-3 text-[13px] text-mut">
+            <span>
+              Question {Math.min(currentNumber, questions.length)} of {questions.length}
+            </span>
+            <span className="ml-auto inline-flex items-baseline gap-1 rounded-full border border-[var(--line2)] bg-[var(--glass)] px-3 py-1">
+              <b className="text-ink">{pct}</b>
+              <span className="text-[11px]">% clarity</span>
+            </span>
           </div>
-          {current ? (
-            <div className="border-t border-[var(--line)] px-7 py-4">
-              {submit.isError ? (
-                <div className="mb-3 rounded-lg bg-[rgba(255,107,154,.14)] px-3 py-1.5 text-[12.5px] text-[#ffd0e0]">
-                  Couldn't generate the loop spec — the LLM provider failed. Check it in
-                  Settings and try again.
-                </div>
-              ) : null}
-              {currentOptions.length > 0 ? (
-                <div className="mb-3">
-                  <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-mut">
-                    Pick an answer
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {currentOptions.map((opt) => (
-                      <button
-                        key={opt}
-                        type="button"
-                        disabled={submit.isPending}
-                        onClick={() => sendAnswer(opt)}
-                        className="rounded-full border border-[rgba(184,166,255,.35)] bg-[var(--glass)] px-3.5 py-1.5 text-[13px] text-ink transition hover:border-[#cdbcff] hover:bg-[rgba(138,108,255,.16)] disabled:opacity-50"
-                      >
-                        {opt}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-              <div className="flex items-end gap-3">
-                <textarea
-                  aria-label="Answer"
-                  value={answer}
-                  onChange={(e) => setAnswer(e.target.value)}
-                  placeholder={
-                    currentOptions.length > 0
-                      ? "Or type your own answer…"
-                      : "Answer the question…"
-                  }
-                  className="max-h-[120px] min-h-[48px] flex-1 resize-none rounded-xl border border-[var(--line2)] bg-white/[0.03] px-4 py-3 text-sm text-ink outline-none focus:border-[#cdbcff]"
-                />
-                <button
-                  type="button"
-                  onClick={() => sendAnswer(answer)}
-                  disabled={submit.isPending || answer.trim().length === 0}
-                  className="rounded-xl bg-gradient-to-br from-violet to-teal px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
+
+          {/* answered so far — compact */}
+          {answeredQuestions.length > 0 ? (
+            <div className="mb-5 space-y-2">
+              {answeredQuestions.map((q) => (
+                <div
+                  key={q.id}
+                  className="rounded-xl border border-[var(--line)] bg-[var(--glass)] px-4 py-3"
                 >
-                  Send ↵
-                </button>
-              </div>
+                  <div className="text-[12px] text-mut">{q.question}</div>
+                  <div className="mt-1 flex items-center gap-2 text-[13.5px] text-ink">
+                    <span aria-hidden className="text-ok">
+                      ✓
+                    </span>
+                    {answerFor(q.id)}
+                  </div>
+                </div>
+              ))}
             </div>
           ) : null}
-        </div>
 
-        {/* requirements panel */}
-        <div className="overflow-auto p-5">
-          <h3 className="mb-4 text-xs font-semibold uppercase tracking-wide text-mut">
-            Missing requirements
-          </h3>
-          <div className="mb-6 text-center">
-            <div
-              className="mx-auto mb-2.5 grid size-[120px] place-items-center rounded-full"
-              style={{
-                background: `conic-gradient(var(--teal) 0% ${pct}%, rgba(255,255,255,.08) ${pct}% 100%)`,
-              }}
-            >
-              <div className="grid size-[98px] place-items-center rounded-full bg-[#0c0c20]">
-                <span className="text-[28px] font-extrabold">
-                  {pct}
-                  <span className="text-[13px] font-semibold text-mut">%</span>
-                </span>
+          {/* current question — one at a time */}
+          {current ? (
+            <div className="rounded-2xl border border-[rgba(184,166,255,.32)] bg-[var(--glass)] p-6">
+              <div className="mb-3 inline-block rounded-md border border-[rgba(255,209,102,.3)] bg-[rgba(255,209,102,.14)] px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-[#ffe2a0]">
+                Clarify · {current.missing_requirement}
               </div>
+              <h2 className="text-[18px] font-bold leading-snug text-white">
+                {current.question}
+              </h2>
+
+              {currentOptions.length > 0 ? (
+                <div className="mt-5 flex flex-col gap-2">
+                  {currentOptions.map((opt) => (
+                    <button
+                      key={opt}
+                      type="button"
+                      disabled={submit.isPending}
+                      onClick={() => sendAnswer(opt)}
+                      className="flex items-center gap-3 rounded-xl border border-[var(--line2)] bg-white/[0.03] px-4 py-3 text-left text-[14px] text-ink transition hover:border-[#cdbcff] hover:bg-[rgba(138,108,255,.14)] disabled:opacity-50"
+                    >
+                      <span
+                        aria-hidden
+                        className="grid size-5 shrink-0 place-items-center rounded-full border border-[var(--line2)] text-[10px] text-mut"
+                      >
+                        ○
+                      </span>
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+
+              <div className="mt-4">
+                <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-mut">
+                  {currentOptions.length > 0 ? "Or type your own" : "Your answer"}
+                </div>
+                <div className="flex items-end gap-3">
+                  <textarea
+                    aria-label="Answer"
+                    value={answer}
+                    onChange={(e) => setAnswer(e.target.value)}
+                    placeholder="Type an answer…"
+                    className="max-h-[120px] min-h-[48px] flex-1 resize-none rounded-xl border border-[var(--line2)] bg-white/[0.03] px-4 py-3 text-sm text-ink outline-none focus:border-[#cdbcff]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => sendAnswer(answer)}
+                    disabled={submit.isPending || answer.trim().length === 0}
+                    className="rounded-xl bg-gradient-to-br from-violet to-teal px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
+                  >
+                    Send ↵
+                  </button>
+                </div>
+              </div>
+
+              {submit.isError ? (
+                <div className="mt-3 rounded-lg bg-[rgba(255,107,154,.14)] px-3 py-1.5 text-[12.5px] text-[#ffd0e0]">
+                  The LLM provider failed — check it in Settings and try again.
+                </div>
+              ) : null}
+              {submit.isPending ? (
+                <div className="mt-3 text-[12.5px] text-mut">Saving your answer…</div>
+              ) : null}
             </div>
-            <div className="text-[13px] text-mut">clarity score</div>
-          </div>
-          {doneReqs.map((r) => (
-            <Req key={r} kind="done" title={r} />
-          ))}
-          {session.missing_requirements.map((r, i) => (
-            <Req key={r} kind={i === 0 ? "active" : "open"} title={r} />
-          ))}
-          <p className="mt-2 text-center text-xs leading-relaxed text-mut">
-            When clarity is sufficient and no blocking gaps remain, LoopForge generates the
-            loop spec for your review.
-          </p>
+          ) : (
+            <div className="rounded-2xl border border-[rgba(70,227,173,.3)] bg-[var(--glass)] p-6 text-center">
+              <div className="text-[15px] font-bold text-ink">All questions answered</div>
+              <p className="mt-1 text-[13px] text-mut">
+                {submit.isError
+                  ? "Spec generation failed — check your LLM provider in Settings, then re-answer to retry."
+                  : "Generating your loop spec…"}
+              </p>
+            </div>
+          )}
         </div>
       </div>
-    </div>
-  );
-}
-
-function Bubble({ who, children }: { who: "maker" | "user"; children: React.ReactNode }) {
-  return (
-    <div className={cn("flex max-w-[78%] gap-3", who === "user" && "ml-auto flex-row-reverse")}>
-      <div
-        className={cn(
-          "grid size-8 shrink-0 place-items-center rounded-[10px] text-sm",
-          who === "maker"
-            ? "bg-gradient-to-br from-violet to-teal"
-            : "bg-[var(--glass2)] text-ink2",
-        )}
-      >
-        {who === "maker" ? "◆" : "you"}
-      </div>
-      <div
-        className={cn(
-          "rounded-2xl border px-[15px] py-3 text-sm leading-relaxed",
-          who === "maker"
-            ? "rounded-tl-sm border-[var(--line)] bg-[var(--glass)] text-ink2"
-            : "rounded-tr-sm border-[rgba(184,166,255,.35)] bg-gradient-to-br from-[rgba(138,108,255,.22)] to-[rgba(74,214,255,.12)] text-ink",
-        )}
-      >
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function Req({ kind, title }: { kind: "done" | "active" | "open"; title: string }) {
-  return (
-    <div
-      className={cn(
-        "mb-2.5 flex gap-3 rounded-xl border p-3",
-        kind === "active"
-          ? "border-[rgba(255,209,102,.4)] bg-[rgba(255,209,102,.07)]"
-          : "border-[var(--line)] bg-[var(--glass)]",
-      )}
-    >
-      <div
-        className={cn(
-          "mt-px grid size-5 shrink-0 place-items-center rounded-md text-xs",
-          kind === "done" && "border border-[rgba(70,227,173,.5)] bg-[rgba(70,227,173,.25)] text-ok",
-          kind === "active" && "border border-[rgba(255,209,102,.5)] text-warn",
-          kind === "open" && "border border-[var(--line2)] bg-[var(--glass2)] text-mut",
-        )}
-      >
-        {kind === "done" ? "✓" : kind === "active" ? "●" : "○"}
-      </div>
-      <b className="text-[13px]">{title}</b>
     </div>
   );
 }

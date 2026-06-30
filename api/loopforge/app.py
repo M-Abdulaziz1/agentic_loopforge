@@ -156,9 +156,11 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
 
         answers = [*session.answers, {"question_id": payload.question_id, "answer": payload.answer}]
         answered_question_ids = {answer["question_id"] for answer in answers if answer["answer"].strip()}
+        answered_in_scope = answered_question_ids & question_ids
+        # The session is only ready once EVERY question has its own answer — one answer
+        # never finalizes the others (no word-count shortcut).
         all_questions_answered = question_ids.issubset(answered_question_ids)
-        clarity_threshold_met = len(payload.answer.strip().split()) >= 6
-        if all_questions_answered or clarity_threshold_met:
+        if all_questions_answered:
             session = session.model_copy(
                 update={
                     "answers": answers,
@@ -177,7 +179,11 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
                 raise _planner_http_error(exc, settings) from exc
             return ClarificationResult(clarification=session, loop_spec=spec)
 
-        session = session.model_copy(update={"answers": answers, "clarity_score": 0.55})
+        progress = len(answered_in_scope) / len(question_ids) if question_ids else 1.0
+        remaining = [q.missing_requirement for q in session.questions if q.id not in answered_question_ids]
+        session = session.model_copy(
+            update={"answers": answers, "clarity_score": progress, "missing_requirements": remaining}
+        )
         store.save_clarification(session)
         return ClarificationResult(clarification=session, loop_spec=None)
 
