@@ -26,6 +26,9 @@ const LoopBuilderPage = lazy(() =>
 const TemplatesPage = lazy(() =>
   import("../pages/TemplatesPage").then((m) => ({ default: m.TemplatesPage })),
 );
+const SettingsPage = lazy(() =>
+  import("../pages/SettingsPage").then((m) => ({ default: m.SettingsPage })),
+);
 const RunPage = lazy(() => import("../pages/RunPage").then((m) => ({ default: m.RunPage })));
 const RunsListPage = lazy(() =>
   import("../pages/RunsListPage").then((m) => ({ default: m.RunsListPage })),
@@ -70,7 +73,7 @@ export function AppRoutes() {
             <RunsListPage title="Context & Memory" to={(id) => `/runs/${id}/context`} />
           }
         />
-        <Route path="/settings" element={<Placeholder title="Settings" />} />
+        <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<Placeholder title="Not found" />} />
       </Route>
     </Routes>

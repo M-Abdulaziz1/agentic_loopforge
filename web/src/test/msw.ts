@@ -7,6 +7,7 @@ import {
   sampleLoopSpec,
   sampleArtifact,
   sampleArtifactContent,
+  sampleProvider,
   sampleResults,
   sampleRun,
   sampleRunContext,
@@ -68,6 +69,15 @@ export const handlers = [
     HttpResponse.json({ ...sampleLoopSpec, id: "spec_from_tpl" }, { status: 201 }),
   ),
   http.delete("/api/templates/:templateId", () => new HttpResponse(null, { status: 204 })),
+  http.get("/api/llm-providers", () => HttpResponse.json([sampleProvider])),
+  http.post("/api/llm-providers", () =>
+    HttpResponse.json({ ...sampleProvider, id: "llm_new" }, { status: 201 }),
+  ),
+  http.patch("/api/llm-providers/:id", () => HttpResponse.json(sampleProvider)),
+  http.delete("/api/llm-providers/:id", () => new HttpResponse(null, { status: 204 })),
+  http.post("/api/llm-providers/:id/test", () =>
+    HttpResponse.json({ ok: true, model: sampleProvider.model }),
+  ),
 ];
 
 export const server = setupServer(...handlers);

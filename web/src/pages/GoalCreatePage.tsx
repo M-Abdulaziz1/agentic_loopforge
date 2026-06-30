@@ -5,6 +5,7 @@ import { Toggle } from "../components/ui/Toggle";
 import { cn } from "../lib/cn";
 import { lockTogglesForMode } from "../lib/capabilities";
 import { useCreateGoal } from "../lib/api/goals";
+import { useLlmProviders } from "../lib/api/llmProviders";
 import type { Budget, GoalMode, GoalToggles } from "../lib/api/types";
 
 const MODES: { value: GoalMode; icon: string; title: string; blurb: string }[] = [
@@ -27,6 +28,8 @@ const MODES: { value: GoalMode; icon: string; title: string; blurb: string }[] =
 export function GoalCreatePage() {
   const navigate = useNavigate();
   const createGoal = useCreateGoal();
+  const { data: providers = [] } = useLlmProviders();
+  const [providerId, setProviderId] = useState("");
   const [text, setText] = useState("");
   const [mode, setMode] = useState<GoalMode>("offline_local");
   const [toggles, setToggles] = useState<GoalToggles>({
@@ -50,6 +53,7 @@ export function GoalCreatePage() {
       toggles: effectiveToggles,
       constraints: {},
       budget,
+      llm_provider_id: providerId || null,
     });
     if (res.loop_spec) navigate(`/specs/${res.loop_spec.id}`);
     else if (res.clarification) navigate(`/goals/${res.goal.id}/clarify`);
@@ -167,6 +171,33 @@ export function GoalCreatePage() {
                 onChange={(v) => setBudget((b) => ({ ...b, max_context_tokens: v }))}
               />
             </div>
+          </GlassCard>
+
+          <GlassCard className="mt-[18px]">
+            <div className="mb-3.5 text-[11px] font-bold uppercase tracking-wide text-mut">
+              LLM provider
+            </div>
+            {providers.length === 0 ? (
+              <p className="text-[13px] text-mut">
+                No providers configured — runs use the env default. Add one in <b>Settings</b>.
+              </p>
+            ) : (
+              <select
+                aria-label="LLM provider"
+                value={providerId}
+                onChange={(e) => setProviderId(e.target.value)}
+                className="w-full rounded-xl border border-[var(--line2)] bg-white/[0.03] px-3.5 py-2.5 text-[14px] text-ink outline-none focus:border-[#cdbcff]"
+              >
+                <option value="" className="bg-bg0">
+                  Default provider
+                </option>
+                {providers.map((p) => (
+                  <option key={p.id} value={p.id} className="bg-bg0">
+                    {p.name} · {p.model}
+                  </option>
+                ))}
+              </select>
+            )}
           </GlassCard>
         </div>
       </div>

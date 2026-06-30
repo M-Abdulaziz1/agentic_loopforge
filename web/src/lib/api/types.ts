@@ -33,7 +33,36 @@ export type GoalCreate = {
   toggles: GoalToggles;
   constraints: Record<string, unknown>;
   budget: Budget;
+  llm_provider_id?: string | null;
 };
+
+export type LLMProviderKind = "openai_compatible" | "anthropic";
+
+export type LLMProvider = {
+  id: string;
+  name: string;
+  kind: LLMProviderKind;
+  base_url: string | null;
+  model: string;
+  timeout_seconds: number;
+  is_default: boolean;
+  has_api_key: boolean;
+  created_at: string;
+};
+
+export type LLMProviderCreate = {
+  name: string;
+  kind: LLMProviderKind;
+  base_url?: string;
+  model: string;
+  api_key?: string;
+  timeout_seconds?: number;
+  is_default?: boolean;
+};
+
+export type LLMProviderUpdate = Partial<Omit<LLMProviderCreate, "kind">>;
+
+export type LLMTestResult = { ok: boolean; detail?: string | null; model?: string | null };
 
 export type Goal = GoalCreate & {
   id: string;

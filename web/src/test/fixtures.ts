@@ -5,6 +5,7 @@ import type {
   ClarificationSession,
   Gate,
   Goal,
+  LLMProvider,
   LoopSpec,
   LoopTemplate,
   Results,
@@ -221,4 +222,16 @@ export const sampleArtifactContent: ArtifactContent = {
   language: "python",
   content:
     "import pandas as pd\nfrom scipy import stats\n\ndf = load('customers_q2')\n# chi-square: support tickets vs churn\nprint(stats.chi2_contingency(pd.crosstab(df.tickets_gt3, df.churned)))\n",
+};
+
+export const sampleProvider: LLMProvider = {
+  id: "llm_local",
+  name: "Local vLLM",
+  kind: "openai_compatible",
+  base_url: "http://localhost:8001/v1",
+  model: "qwen2.5-coder",
+  timeout_seconds: 60,
+  is_default: true,
+  has_api_key: true,
+  created_at: "2026-06-30T09:00:00Z",
 };
