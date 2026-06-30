@@ -182,3 +182,44 @@ def test_create_goal_returns_502_when_real_llm_output_is_invalid(monkeypatch) ->
 
     assert response.status_code == 502
     assert "LLM" in response.json()["detail"]
+
+
+def test_clarification_requires_an_answer_per_question(monkeypatch) -> None:
+    from api.loopforge import app as app_module
+
+    clarity_two = json.dumps(
+        {
+            "status": "needs_clarification",
+            "clarity_score": 0.3,
+            "missing_requirements": ["outcome", "success metric"],
+            "questions": [
+                {"question": "What outcome do you want?", "missing_requirement": "outcome", "options": ["A", "B"]},
+                {"question": "How is success judged?", "missing_requirement": "success metric", "options": ["X", "Y"]},
+            ],
+        }
+    )
+    llm = SequenceLLM([clarity_two, spec_json()])
+    monkeypatch.setattr(app_module, "create_llm_provider", lambda settings: llm)
+    client = TestClient(app_module.create_app())
+
+    created = client.post("/api/goals", json={"text": "Do something useful with the uploaded dataset"}).json()
+    goal_id = created["goal"]["id"]
+    questions = created["clarification"]["questions"]
+    assert len(questions) == 2
+    assert created["loop_spec"] is None
+
+    # Answering only the first question (even verbosely) must NOT finalize the rest.
+    first = client.post(
+        f"/api/goals/{goal_id}/clarification/answers",
+        json={"question_id": questions[0]["id"], "answer": "A very detailed multi word answer here"},
+    ).json()
+    assert first["loop_spec"] is None
+    assert first["clarification"]["status"] == "open"
+
+    # Answering the remaining question completes it and generates the spec.
+    second = client.post(
+        f"/api/goals/{goal_id}/clarification/answers",
+        json={"question_id": questions[1]["id"], "answer": "ROC AUC"},
+    ).json()
+    assert second["clarification"]["status"] == "ready"
+    assert second["loop_spec"] is not None
