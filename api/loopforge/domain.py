@@ -63,6 +63,7 @@ class GoalCreate(BaseModel):
     toggles: GoalToggles = Field(default_factory=GoalToggles)
     constraints: dict[str, Any] = Field(default_factory=dict)
     budget: Budget = Field(default_factory=Budget)
+    llm_provider_id: str | None = None
 
 
 class Goal(GoalCreate):
@@ -155,6 +156,60 @@ class LoopTemplate(BaseModel):
     context_policy: dict[str, Any]
     improvement_strategy: str
     created_at: datetime = Field(default_factory=now_utc)
+
+
+class LLMProviderKind(StrEnum):
+    OPENAI_COMPATIBLE = "openai_compatible"
+    ANTHROPIC = "anthropic"
+
+
+class LLMProviderCreate(BaseModel):
+    name: str
+    kind: LLMProviderKind
+    base_url: str | None = None
+    model: str
+    api_key: str | None = None
+    timeout_seconds: float = Field(default=60.0, gt=0)
+    is_default: bool = False
+
+
+class LLMProviderUpdate(BaseModel):
+    name: str | None = None
+    base_url: str | None = None
+    model: str | None = None
+    api_key: str | None = None
+    timeout_seconds: float | None = Field(default=None, gt=0)
+    is_default: bool | None = None
+
+
+class StoredLLMProvider(BaseModel):
+    id: str = Field(default_factory=lambda: new_id("llm_provider"))
+    name: str
+    kind: LLMProviderKind
+    base_url: str | None = None
+    model: str
+    encrypted_api_key: str | None = None
+    timeout_seconds: float = Field(default=60.0, gt=0)
+    is_default: bool = False
+    created_at: datetime = Field(default_factory=now_utc)
+
+
+class LLMProvider(BaseModel):
+    id: str
+    name: str
+    kind: LLMProviderKind
+    base_url: str | None = None
+    model: str
+    timeout_seconds: float
+    is_default: bool
+    has_api_key: bool
+    created_at: datetime
+
+
+class LLMTestResult(BaseModel):
+    ok: bool
+    detail: str | None = None
+    model: str | None = None
 
 
 class GoalCreateResult(BaseModel):

@@ -25,6 +25,10 @@ from api.loopforge.domain import (
     GoalCreate,
     GoalCreateResult,
     InsightResult,
+    LLMProvider as LLMProviderView,
+    LLMProviderCreate,
+    LLMProviderUpdate,
+    LLMTestResult,
     LoopSpec,
     LoopSpecUpdate,
     LoopTemplate,
@@ -38,12 +42,15 @@ from api.loopforge.domain import (
     RunEvent,
     RunStartRequest,
     RunStatus,
+    StoredLLMProvider,
     now_utc,
 )
 from api.loopforge.context import ContextManager
 from api.loopforge.planner import LoopPlanner
 from api.loopforge.runner import LoopRunner
-from api.loopforge.runtime import create_llm_provider, create_sandbox_provider
+from api.loopforge.providers import LLMProviderError
+from api.loopforge.runtime import create_llm_provider, create_llm_provider_from_config, create_sandbox_provider
+from api.loopforge.secrets import SecretCipher
 from api.loopforge.settings import Settings
 from api.loopforge.sqlite_store import SQLiteStore
 from api.loopforge.store import InMemoryStore, Store
@@ -72,6 +79,7 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
     store = store or InMemoryStore()
     llm = create_llm_provider(settings)
     planner = LoopPlanner(llm=llm)
+    secret_cipher = SecretCipher(settings.secret_key)
     sandbox = create_sandbox_provider(settings)
     tools = default_tool_registry()
 
@@ -242,6 +250,70 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
         _audit(store, "template.delete", "template", templateId, {})
         return None
 
+    @app.get("/api/llm-providers")
+    def list_llm_providers() -> list[LLMProviderView]:
+        return [_public_llm_provider(provider) for provider in store.list_llm_providers()]
+
+    @app.post("/api/llm-providers", status_code=201)
+    def create_llm_provider_record(payload: LLMProviderCreate) -> LLMProviderView:
+        provider = StoredLLMProvider(
+            name=payload.name,
+            kind=payload.kind,
+            base_url=payload.base_url,
+            model=payload.model,
+            encrypted_api_key=secret_cipher.encrypt(payload.api_key),
+            timeout_seconds=payload.timeout_seconds,
+            is_default=payload.is_default,
+        )
+        saved = store.save_llm_provider(provider)
+        _audit(store, "llm_provider.create", "llm_provider", saved.id, {"kind": saved.kind, "model": saved.model, "is_default": saved.is_default})
+        return _public_llm_provider(saved)
+
+    @app.get("/api/llm-providers/{providerId}")
+    def get_llm_provider_record(providerId: str) -> LLMProviderView:
+        try:
+            return _public_llm_provider(store.get_llm_provider(providerId))
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="LLM provider not found") from exc
+
+    @app.patch("/api/llm-providers/{providerId}")
+    def update_llm_provider_record(providerId: str, payload: LLMProviderUpdate) -> LLMProviderView:
+        try:
+            provider = store.get_llm_provider(providerId)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="LLM provider not found") from exc
+
+        update = payload.model_dump(exclude_unset=True)
+        if "api_key" in update:
+            update["encrypted_api_key"] = secret_cipher.encrypt(update.pop("api_key"))
+        saved = store.save_llm_provider(provider.model_copy(update=update))
+        _audit(store, "llm_provider.update", "llm_provider", saved.id, {"is_default": saved.is_default})
+        return _public_llm_provider(saved)
+
+    @app.delete("/api/llm-providers/{providerId}", status_code=204)
+    def delete_llm_provider_record(providerId: str) -> None:
+        try:
+            store.delete_llm_provider(providerId)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="LLM provider not found") from exc
+        _audit(store, "llm_provider.delete", "llm_provider", providerId, {})
+        return None
+
+    @app.post("/api/llm-providers/{providerId}/test")
+    def test_llm_provider_record(providerId: str) -> LLMTestResult:
+        try:
+            provider = store.get_llm_provider(providerId)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="LLM provider not found") from exc
+        try:
+            llm_to_test = create_llm_provider_from_config(provider, settings)
+            llm_to_test.complete(system="loopforge-provider-test", prompt="Reply with OK.")
+        except LLMProviderError as exc:
+            return LLMTestResult(ok=False, detail=_sanitize_provider_detail(str(exc), provider, settings), model=provider.model)
+        except Exception as exc:
+            return LLMTestResult(ok=False, detail=_sanitize_provider_detail(str(exc), provider, settings), model=provider.model)
+        return LLMTestResult(ok=True, detail="Provider test succeeded", model=provider.model)
+
     @app.post("/api/goals/{goalId}/runs", status_code=201)
     def start_run(goalId: str, payload: RunStartRequest) -> Run:
         try:
@@ -253,7 +325,7 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
             raise HTTPException(status_code=404, detail="Goal or loop spec not found")
         if spec.status != "approved":
             raise HTTPException(status_code=409, detail="Loop spec must be approved before running")
-        runner = LoopRunner(store=store, llm=llm, sandbox=sandbox, tools=tools)
+        runner = LoopRunner(store=store, llm=_llm_for_goal(store, settings, goal), sandbox=sandbox, tools=tools)
         run = runner.start(goal, spec)
         _audit(store, "run.start", "run", run.id, {"goal_id": goal.id, "loop_spec_id": spec.id, "status": run.status})
         return run
@@ -387,11 +459,47 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
                 spec = store.get_loop_spec(run.loop_spec_id)
             except KeyError as exc:
                 raise HTTPException(status_code=404, detail="Run goal or loop spec not found") from exc
-            runner = LoopRunner(store=store, llm=llm, sandbox=sandbox, tools=tools)
+            runner = LoopRunner(store=store, llm=_llm_for_goal(store, settings, goal), sandbox=sandbox, tools=tools)
             runner.resume_after_gate(run, goal, spec)
         return decided
 
     return app
+
+
+def _public_llm_provider(provider: StoredLLMProvider) -> LLMProviderView:
+    return LLMProviderView(
+        id=provider.id,
+        name=provider.name,
+        kind=provider.kind,
+        base_url=provider.base_url,
+        model=provider.model,
+        timeout_seconds=provider.timeout_seconds,
+        is_default=provider.is_default,
+        has_api_key=provider.encrypted_api_key is not None,
+        created_at=provider.created_at,
+    )
+
+
+def _llm_for_goal(store: Store, settings: Settings, goal: Goal):
+    try:
+        if goal.llm_provider_id:
+            return create_llm_provider_from_config(store.get_llm_provider(goal.llm_provider_id), settings)
+        default_provider = store.get_default_llm_provider()
+        if default_provider is not None:
+            return create_llm_provider_from_config(default_provider, settings)
+        return create_llm_provider(settings)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="LLM provider not found") from exc
+    except LLMProviderError as exc:
+        raise HTTPException(status_code=422, detail=_sanitize_provider_detail(str(exc), None, settings)) from exc
+
+
+def _sanitize_provider_detail(detail: str, provider: StoredLLMProvider | None, settings: Settings) -> str:
+    if provider is not None:
+        secret = SecretCipher(settings.secret_key).decrypt(provider.encrypted_api_key) if provider.encrypted_api_key else None
+        if secret:
+            detail = detail.replace(secret, "[REDACTED_SECRET]")
+    return re.sub(r"Bearer\s+[^\s]+", "Bearer [REDACTED_SECRET]", detail)
 
 
 def _validate_loop_spec(goal: Goal, spec: LoopSpec) -> None:

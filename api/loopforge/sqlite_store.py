@@ -7,7 +7,7 @@ from typing import TypeVar
 
 from pydantic import BaseModel
 
-from api.loopforge.domain import Artifact, AuditEvent, ClarificationSession, ContextEntry, Gate, GateStatus, Goal, LoopSpec, LoopTemplate, Run, RunEvent
+from api.loopforge.domain import Artifact, AuditEvent, ClarificationSession, ContextEntry, Gate, GateStatus, Goal, LoopSpec, LoopTemplate, Run, RunEvent, StoredLLMProvider
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
 
@@ -83,6 +83,30 @@ class SQLiteStore:
             self._connection.commit()
         if cursor.rowcount == 0:
             raise KeyError(template_id)
+
+    def save_llm_provider(self, provider: StoredLLMProvider) -> StoredLLMProvider:
+        if provider.is_default:
+            for existing in self.list_llm_providers():
+                if existing.id != provider.id and existing.is_default:
+                    self._save("llm_provider", existing.model_copy(update={"is_default": False}))
+        self._save("llm_provider", provider)
+        return provider
+
+    def get_llm_provider(self, provider_id: str) -> StoredLLMProvider:
+        return self._get("llm_provider", provider_id, StoredLLMProvider)
+
+    def list_llm_providers(self) -> list[StoredLLMProvider]:
+        return sorted(self._list("llm_provider", StoredLLMProvider), key=lambda provider: provider.created_at, reverse=True)
+
+    def get_default_llm_provider(self) -> StoredLLMProvider | None:
+        return next((provider for provider in self.list_llm_providers() if provider.is_default), None)
+
+    def delete_llm_provider(self, provider_id: str) -> None:
+        with self._lock:
+            cursor = self._connection.execute("DELETE FROM records WHERE kind = ? AND id = ?", ("llm_provider", provider_id))
+            self._connection.commit()
+        if cursor.rowcount == 0:
+            raise KeyError(provider_id)
 
     def save_run(self, run: Run) -> Run:
         self._save("run", run, goal_id=run.goal_id)
