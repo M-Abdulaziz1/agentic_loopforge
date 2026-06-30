@@ -57,7 +57,7 @@ from api.loopforge.domain import (
 )
 from api.loopforge.context import ContextManager
 from api.loopforge.datasets import parse_multipart_upload, profile_csv, safe_dataset_filename
-from api.loopforge.planner import LoopPlanner
+from api.loopforge.planner import LoopPlanner, PlannerError
 from api.loopforge.runner import LoopRunner
 from api.loopforge.providers import DatasetMount, LLMProviderError
 from api.loopforge.runtime import create_llm_provider, create_llm_provider_from_config, create_sandbox_provider
@@ -110,7 +110,10 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
                 raise HTTPException(status_code=404, detail="Evaluator not found") from exc
         goal = store.save_goal(Goal(**payload.model_dump()))
         planner = LoopPlanner(llm=_llm_for_goal(store, settings, goal))
-        clarity = planner.check_clarity(goal)
+        try:
+            clarity = planner.check_clarity(goal)
+        except (PlannerError, LLMProviderError) as exc:
+            raise _planner_http_error(exc, settings) from exc
         goal = goal.model_copy(update={"status": clarity.status})
         store.save_goal(goal)
         if clarity.session is not None:
@@ -118,7 +121,10 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
             _audit(store, "goal.create", "goal", goal.id, {"status": goal.status})
             return GoalCreateResult(goal=goal, clarification=session, loop_spec=None)
 
-        spec = store.save_loop_spec(planner.generate_spec(goal, dataset=_dataset_for_goal(store, goal)))
+        try:
+            spec = store.save_loop_spec(planner.generate_spec(goal, dataset=_dataset_for_goal(store, goal)))
+        except (PlannerError, LLMProviderError) as exc:
+            raise _planner_http_error(exc, settings) from exc
         _audit(store, "goal.create", "goal", goal.id, {"status": goal.status, "loop_spec_id": spec.id})
         return GoalCreateResult(goal=goal, clarification=None, loop_spec=spec)
 
@@ -165,7 +171,10 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
             store.save_goal(goal)
             store.save_clarification(session)
             planner = LoopPlanner(llm=_llm_for_goal(store, settings, goal))
-            spec = store.save_loop_spec(planner.generate_spec(goal, dataset=_dataset_for_goal(store, goal)))
+            try:
+                spec = store.save_loop_spec(planner.generate_spec(goal, dataset=_dataset_for_goal(store, goal)))
+            except (PlannerError, LLMProviderError) as exc:
+                raise _planner_http_error(exc, settings) from exc
             return ClarificationResult(clarification=session, loop_spec=spec)
 
         session = session.model_copy(update={"answers": answers, "clarity_score": 0.55})
@@ -686,6 +695,12 @@ def _llm_for_goal(store: Store, settings: Settings, goal: Goal):
         raise HTTPException(status_code=404, detail="LLM provider not found") from exc
     except LLMProviderError as exc:
         raise HTTPException(status_code=422, detail=_sanitize_provider_detail(str(exc), None, settings)) from exc
+
+
+def _planner_http_error(exc: Exception, settings: Settings) -> HTTPException:
+    # 502: the upstream LLM failed or returned unusable output. Never a fake loop.
+    detail = _sanitize_provider_detail(str(exc), None, settings)
+    return HTTPException(status_code=502, detail=detail or "The LLM provider failed to produce a valid result.")
 
 
 def _sanitize_provider_detail(detail: str, provider: StoredLLMProvider | None, settings: Settings) -> str:

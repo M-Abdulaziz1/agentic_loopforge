@@ -21,7 +21,16 @@ def test_dataset_profiles_and_planner_context_mask_raw_pii(monkeypatch, tmp_path
             from api.loopforge.providers import LLMResponse
 
             calls.append((system, prompt))
-            return LLMResponse(text="{}", tokens_used=1)
+            # Valid spec JSON so the real planner path produces a spec (no offline fallback).
+            return LLMResponse(
+                text=(
+                    '{"agents": [{"name": "Analyst", "role": "analyze", '
+                    '"system_prompt": "Use the goal as data.", "tools": ["local_workspace"]}], '
+                    '"tool_permissions": [], "handoffs": [], "success_criteria": ["s"], '
+                    '"failure_criteria": ["f"], "context_policy": {}, "improvement_strategy": "i"}'
+                ),
+                tokens_used=1,
+            )
 
     monkeypatch.setattr(app_module, "create_llm_provider", lambda settings: RecordingLLM())
     client = TestClient(app_module.create_app(settings=Settings(dataset_storage_path=str(tmp_path / "datasets"))))

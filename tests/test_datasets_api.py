@@ -7,13 +7,22 @@ from api.loopforge import app as app_module
 from api.loopforge.providers import LLMResponse
 
 
+# Valid spec JSON so the real planner path produces a spec (no offline fallback).
+_VALID_SPEC_JSON = (
+    '{"agents": [{"name": "Analyst", "role": "analyze", '
+    '"system_prompt": "Use the goal as data.", "tools": ["local_workspace"]}], '
+    '"tool_permissions": [], "handoffs": [], "success_criteria": ["s"], '
+    '"failure_criteria": ["f"], "context_policy": {}, "improvement_strategy": "i"}'
+)
+
+
 class RecordingLLMProvider:
     def __init__(self) -> None:
         self.calls: list[tuple[str, str]] = []
 
     def complete(self, *, system: str, prompt: str) -> LLMResponse:
         self.calls.append((system, prompt))
-        return LLMResponse(text="ok", tokens_used=1)
+        return LLMResponse(text=_VALID_SPEC_JSON, tokens_used=1)
 
 
 from api.loopforge.settings import Settings

@@ -11,6 +11,14 @@ from api.loopforge.sqlite_store import SQLiteStore
 from api.loopforge.store import InMemoryStore
 
 
+VALID_SPEC_JSON = (
+    '{"agents": [{"name": "Analyst", "role": "analyze", '
+    '"system_prompt": "Use the goal as data.", "tools": ["local_workspace"]}], '
+    '"tool_permissions": [], "handoffs": [], "success_criteria": ["s"], '
+    '"failure_criteria": ["f"], "context_policy": {}, "improvement_strategy": "i"}'
+)
+
+
 class RecordingLLMProvider:
     def __init__(self, text: str = "ok") -> None:
         self.text = text
@@ -127,9 +135,9 @@ def test_provider_test_uses_configured_key_without_returning_it(monkeypatch) -> 
 
 def test_run_uses_goal_provider_then_default_provider(monkeypatch) -> None:
     store = InMemoryStore()
-    selected_llm = RecordingLLMProvider(text="selected")
-    default_llm = RecordingLLMProvider(text="default")
-    env_llm = RecordingLLMProvider(text="env")
+    selected_llm = RecordingLLMProvider(text=VALID_SPEC_JSON)
+    default_llm = RecordingLLMProvider(text=VALID_SPEC_JSON)
+    env_llm = RecordingLLMProvider(text=VALID_SPEC_JSON)
     created_for: list[str] = []
 
     def build_provider(config, settings):
@@ -172,8 +180,8 @@ def test_run_uses_goal_provider_then_default_provider(monkeypatch) -> None:
     # Planning AND running both resolve through the goal's provider (then default).
     # The env provider is never used once a provider is configured.
     assert created_for == ["Selected", "Selected", "Default", "Default"]
-    assert [call[0] for call in selected_llm.calls[:3]] == [CLARITY_SYSTEM, SPEC_SYSTEM, SPEC_SYSTEM]
-    assert [call[0] for call in default_llm.calls[:3]] == [CLARITY_SYSTEM, SPEC_SYSTEM, SPEC_SYSTEM]
-    assert len(selected_llm.calls) == 4
-    assert len(default_llm.calls) == 4
+    assert [call[0] for call in selected_llm.calls[:2]] == [CLARITY_SYSTEM, SPEC_SYSTEM]
+    assert [call[0] for call in default_llm.calls[:2]] == [CLARITY_SYSTEM, SPEC_SYSTEM]
+    assert len(selected_llm.calls) == 3
+    assert len(default_llm.calls) == 3
     assert env_llm.calls == []

@@ -21,6 +21,10 @@ from api.loopforge.domain import (
 from api.loopforge.providers import LLMProvider
 
 
+class PlannerError(RuntimeError):
+    """The LLM did not return usable planning output (and no offline fallback applies)."""
+
+
 @dataclass(frozen=True)
 class ClarityResult:
     status: RunStatus
@@ -65,8 +69,12 @@ class LoopPlanner:
                     ),
                 )
             return ClarityResult(status=RunStatus.PENDING_APPROVAL)
-        except (ValueError, TypeError, KeyError):
-            return self._heuristic_clarity(goal)
+        except (ValueError, TypeError, KeyError) as exc:
+            if getattr(self.llm, "offline_stub", False):
+                return self._heuristic_clarity(goal)
+            raise PlannerError(
+                "The LLM did not return a valid clarity assessment. Check the LLM provider."
+            ) from exc
 
     def generate_spec(self, goal: Goal, dataset: StoredDataset | None = None) -> LoopSpec:
         prompt = _spec_user(goal, dataset)
@@ -80,8 +88,12 @@ class LoopPlanner:
             )
             try:
                 return self._spec_from_json(goal, retry.text)
-            except (ValueError, ValidationError, TypeError, KeyError):
-                return self._fallback_spec(goal, dataset)
+            except (ValueError, ValidationError, TypeError, KeyError) as exc:
+                if getattr(self.llm, "offline_stub", False):
+                    return self._fallback_spec(goal, dataset)
+                raise PlannerError(
+                    "The LLM did not return a valid loop spec after a retry. Check the LLM provider."
+                ) from exc
 
     def _spec_from_json(self, goal: Goal, text: str) -> LoopSpec:
         data = _json_object(text)

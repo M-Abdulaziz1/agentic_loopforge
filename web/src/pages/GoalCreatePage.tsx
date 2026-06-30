@@ -6,6 +6,7 @@ import { AutonomySlider } from "../components/ui/AutonomySlider";
 import { cn } from "../lib/cn";
 import { lockTogglesForMode } from "../lib/capabilities";
 import { DEFAULT_AUTONOMY } from "../lib/autonomy";
+import { ApiError } from "../lib/api/client";
 import { useCreateGoal } from "../lib/api/goals";
 import { useLlmProviders } from "../lib/api/llmProviders";
 import { datasetUploadErrorMessage, useDatasets, useUploadDataset } from "../lib/api/datasets";
@@ -78,20 +79,24 @@ export function GoalCreatePage() {
   }
 
   async function submit() {
-    const res = await createGoal.mutateAsync({
-      text,
-      mode,
-      toggles: effectiveToggles,
-      constraints: {},
-      budget,
-      llm_provider_id: providerId || null,
-      dataset_id: datasetId || null,
-      evaluator_id: evaluatorId || null,
-      autonomy,
-    });
-    if (res.loop_spec) navigate(`/specs/${res.loop_spec.id}`);
-    else if (res.clarification) navigate(`/goals/${res.goal.id}/clarify`);
-    else navigate(`/goals/${res.goal.id}`);
+    try {
+      const res = await createGoal.mutateAsync({
+        text,
+        mode,
+        toggles: effectiveToggles,
+        constraints: {},
+        budget,
+        llm_provider_id: providerId || null,
+        dataset_id: datasetId || null,
+        evaluator_id: evaluatorId || null,
+        autonomy,
+      });
+      if (res.loop_spec) navigate(`/specs/${res.loop_spec.id}`);
+      else if (res.clarification) navigate(`/goals/${res.goal.id}/clarify`);
+      else navigate(`/goals/${res.goal.id}`);
+    } catch {
+      // Error surfaced below via createGoal.isError — no fake fallback.
+    }
   }
 
   return (
@@ -335,9 +340,15 @@ export function GoalCreatePage() {
       </div>
 
       <div className="fixed bottom-0 left-[250px] right-0 flex items-center gap-3 border-t border-[var(--line)] bg-[rgba(8,8,26,.92)] px-7 py-4 backdrop-blur">
-        <div className="text-[12.5px] text-mut">
-          Next: clarity check → clarification (if needed) → generated loop spec.
-        </div>
+        {createGoal.isError ? (
+          <div className="max-w-[60%] rounded-lg bg-[rgba(255,107,154,.14)] px-3 py-1.5 text-[12.5px] text-[#ffd0e0]">
+            {goalCreateErrorMessage(createGoal.error)}
+          </div>
+        ) : (
+          <div className="text-[12.5px] text-mut">
+            Next: clarity check → clarification (if needed) → generated loop spec.
+          </div>
+        )}
         <div className="flex-1" />
         <button
           type="button"
@@ -408,4 +419,20 @@ function BudgetField(props: {
       />
     </div>
   );
+}
+
+function goalCreateErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    const detail =
+      typeof error.body === "object" && error.body !== null && "detail" in error.body
+        ? String((error.body as { detail?: unknown }).detail)
+        : "";
+    if (error.status === 502)
+      return detail || "The LLM provider failed to produce a valid result. Check your provider in Settings.";
+    if (error.status === 404)
+      return detail || "Selected provider, dataset, or evaluator was not found.";
+    if (error.status === 422) return detail || "The LLM provider request failed.";
+    return detail || `Goal creation failed (API ${error.status}).`;
+  }
+  return "Goal creation failed. Check your LLM provider and try again.";
 }

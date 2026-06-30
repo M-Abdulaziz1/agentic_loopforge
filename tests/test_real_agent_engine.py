@@ -149,3 +149,36 @@ def test_runner_honest_empty_when_evaluator_rejects_candidate() -> None:
 
     assert run.status == "completed"
     assert store.list_artifacts(run.id) == []
+
+
+def test_planner_raises_for_real_llm_invalid_output() -> None:
+    import pytest
+
+    from api.loopforge.planner import PlannerError
+
+    goal = Goal(text="Analyze the uploaded dataset for churn drivers and validate them")
+
+    # A real (non-offline) provider returning junk must raise, not fabricate.
+    with pytest.raises(PlannerError):
+        LoopPlanner(SequenceLLM(["not json"])).check_clarity(goal)
+    with pytest.raises(PlannerError):
+        LoopPlanner(SequenceLLM(["not json", "still not json"])).generate_spec(goal)
+
+
+def test_create_goal_returns_502_when_real_llm_output_is_invalid(monkeypatch) -> None:
+    from api.loopforge import app as app_module
+
+    class JunkLLM:
+        def complete(self, *, system: str, prompt: str) -> LLMResponse:
+            return LLMResponse(text="not json at all", tokens_used=1)
+
+    monkeypatch.setattr(app_module, "create_llm_provider", lambda settings: JunkLLM())
+    client = TestClient(app_module.create_app())
+
+    response = client.post(
+        "/api/goals",
+        json={"text": "Analyze the uploaded dataset for churn drivers and validate them"},
+    )
+
+    assert response.status_code == 502
+    assert "LLM" in response.json()["detail"]

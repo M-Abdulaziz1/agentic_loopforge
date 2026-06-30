@@ -78,6 +78,11 @@ class OpenAICompatibleLLMProvider:
 
 
 class FakeLLMProvider:
+    # Offline/no-LLM stub. The planner only falls back to deterministic clarity/spec
+    # output when the provider is flagged offline; any REAL provider that returns
+    # invalid output raises instead of producing a fake loop.
+    offline_stub = True
+
     def complete(self, *, system: str, prompt: str) -> LLMResponse:
         text = f"FAKE_RESPONSE system={system} prompt={prompt[:80]}"
         return LLMResponse(text=text, tokens_used=estimate_tokens(system) + estimate_tokens(prompt))
