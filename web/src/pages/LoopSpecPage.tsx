@@ -3,6 +3,7 @@ import { GlassCard } from "../components/ui/GlassCard";
 import { cn } from "../lib/cn";
 import { useApproveLoopSpec, useLoopSpec } from "../lib/api/loopspecs";
 import { useGoal } from "../lib/api/goals";
+import { useStartRun } from "../lib/api/runs";
 
 export function LoopSpecPage() {
   const { specId = "" } = useParams();
@@ -10,16 +11,22 @@ export function LoopSpecPage() {
   const { data: spec, isLoading } = useLoopSpec(specId);
   const approve = useApproveLoopSpec(specId);
   const { data: goal } = useGoal(spec?.goal_id ?? "");
+  const startRun = useStartRun(spec?.goal_id ?? "");
 
   if (isLoading || !spec) {
     return <div className="p-8 text-mut">Loading loop spec…</div>;
   }
 
   const denied = spec.tool_permissions.filter((p) => !p.enabled);
+  const isApproved = spec.status === "approved";
 
   async function approveSpec() {
     await approve.mutateAsync();
-    navigate("/runs");
+  }
+
+  async function startRunNow() {
+    const run = await startRun.mutateAsync(spec.id);
+    navigate(`/runs/${run.id}`);
   }
 
   return (
@@ -151,7 +158,9 @@ export function LoopSpecPage() {
 
       <div className="fixed bottom-0 left-[250px] right-0 flex items-center gap-3 border-t border-[var(--line)] bg-[rgba(8,8,26,.92)] px-7 py-4 backdrop-blur">
         <div className="text-[12.5px] text-mut">
-          Approving creates an approved spec you can run. You can edit any section first.
+          {isApproved
+            ? "Spec approved. Start the run to execute the loop."
+            : "Approve to enable the run. You can edit any section first."}
         </div>
         <div className="flex-1" />
         <button
@@ -168,14 +177,25 @@ export function LoopSpecPage() {
         >
           ✎ Edit in builder
         </button>
-        <button
-          type="button"
-          onClick={approveSpec}
-          disabled={approve.isPending || spec.status === "approved"}
-          className="rounded-xl bg-gradient-to-br from-ok to-[#28c596] px-[22px] py-2.5 text-sm font-bold text-[#04231a] shadow-[0_8px_24px_rgba(70,227,173,.3)] disabled:opacity-50"
-        >
-          {spec.status === "approved" ? "✓ Approved" : "✓ Approve & enable run"}
-        </button>
+        {isApproved ? (
+          <button
+            type="button"
+            onClick={startRunNow}
+            disabled={startRun.isPending}
+            className="rounded-xl bg-gradient-to-br from-violet to-teal px-[22px] py-2.5 text-sm font-bold text-white shadow-[0_8px_24px_rgba(138,108,255,.35)] disabled:opacity-50"
+          >
+            {startRun.isPending ? "Starting…" : "▶ Start run"}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={approveSpec}
+            disabled={approve.isPending}
+            className="rounded-xl bg-gradient-to-br from-ok to-[#28c596] px-[22px] py-2.5 text-sm font-bold text-[#04231a] shadow-[0_8px_24px_rgba(70,227,173,.3)] disabled:opacity-50"
+          >
+            {approve.isPending ? "Approving…" : "✓ Approve & enable run"}
+          </button>
+        )}
       </div>
     </div>
   );

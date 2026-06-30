@@ -28,8 +28,10 @@ test("renders agents and criteria from the spec", async () => {
   expect(screen.getByText(/drivers pass significance/)).toBeInTheDocument();
 });
 
-test("approving navigates to runs", async () => {
+test("approve then start run navigates to the started run", async () => {
   renderAt("/specs/spec_churn_v1");
   await userEvent.click(await screen.findByRole("button", { name: /Approve & enable run/ }));
-  expect(await screen.findByTestId("loc")).toHaveTextContent("/runs");
+  // After approval the primary action becomes "Start run", which creates the run.
+  await userEvent.click(await screen.findByRole("button", { name: /Start run/ }));
+  expect(await screen.findByTestId("loc")).toHaveTextContent("/runs/run_a91c");
 });

@@ -88,8 +88,6 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
     )
     settings = settings or Settings()
     store = store or InMemoryStore()
-    llm = create_llm_provider(settings)
-    planner = LoopPlanner(llm=llm)
     secret_cipher = SecretCipher(settings.secret_key)
     sandbox = create_sandbox_provider(settings)
     tools = default_tool_registry()
@@ -111,6 +109,7 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
             except KeyError as exc:
                 raise HTTPException(status_code=404, detail="Evaluator not found") from exc
         goal = store.save_goal(Goal(**payload.model_dump()))
+        planner = LoopPlanner(llm=_llm_for_goal(store, settings, goal))
         clarity = planner.check_clarity(goal)
         goal = goal.model_copy(update={"status": clarity.status})
         store.save_goal(goal)
@@ -165,6 +164,7 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
             goal = goal.model_copy(update={"status": RunStatus.PENDING_APPROVAL})
             store.save_goal(goal)
             store.save_clarification(session)
+            planner = LoopPlanner(llm=_llm_for_goal(store, settings, goal))
             spec = store.save_loop_spec(planner.generate_spec(goal, dataset=_dataset_for_goal(store, goal)))
             return ClarificationResult(clarification=session, loop_spec=spec)
 

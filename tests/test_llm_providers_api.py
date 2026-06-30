@@ -169,14 +169,11 @@ def test_run_uses_goal_provider_then_default_provider(monkeypatch) -> None:
     assert default_provider["is_default"] is True
     assert selected_run.status_code == 201
     assert default_run.status_code == 201
-    assert created_for == ["Selected", "Default"]
-    assert len(selected_llm.calls) == 1
-    assert len(default_llm.calls) == 1
-    assert [call[0] for call in env_llm.calls] == [
-        CLARITY_SYSTEM,
-        SPEC_SYSTEM,
-        SPEC_SYSTEM,
-        CLARITY_SYSTEM,
-        SPEC_SYSTEM,
-        SPEC_SYSTEM,
-    ]
+    # Planning AND running both resolve through the goal's provider (then default).
+    # The env provider is never used once a provider is configured.
+    assert created_for == ["Selected", "Selected", "Default", "Default"]
+    assert [call[0] for call in selected_llm.calls[:3]] == [CLARITY_SYSTEM, SPEC_SYSTEM, SPEC_SYSTEM]
+    assert [call[0] for call in default_llm.calls[:3]] == [CLARITY_SYSTEM, SPEC_SYSTEM, SPEC_SYSTEM]
+    assert len(selected_llm.calls) == 4
+    assert len(default_llm.calls) == 4
+    assert env_llm.calls == []
