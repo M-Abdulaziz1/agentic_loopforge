@@ -6,6 +6,7 @@ import { cn } from "../lib/cn";
 import { lockTogglesForMode } from "../lib/capabilities";
 import { useCreateGoal } from "../lib/api/goals";
 import { useLlmProviders } from "../lib/api/llmProviders";
+import { useDatasets } from "../lib/api/datasets";
 import type { Budget, GoalMode, GoalToggles } from "../lib/api/types";
 
 const MODES: { value: GoalMode; icon: string; title: string; blurb: string }[] = [
@@ -29,7 +30,9 @@ export function GoalCreatePage() {
   const navigate = useNavigate();
   const createGoal = useCreateGoal();
   const { data: providers = [] } = useLlmProviders();
+  const { data: datasets = [] } = useDatasets();
   const [providerId, setProviderId] = useState("");
+  const [datasetId, setDatasetId] = useState("");
   const [text, setText] = useState("");
   const [mode, setMode] = useState<GoalMode>("offline_local");
   const [toggles, setToggles] = useState<GoalToggles>({
@@ -54,6 +57,7 @@ export function GoalCreatePage() {
       constraints: {},
       budget,
       llm_provider_id: providerId || null,
+      dataset_id: datasetId || null,
     });
     if (res.loop_spec) navigate(`/specs/${res.loop_spec.id}`);
     else if (res.clarification) navigate(`/goals/${res.goal.id}/clarify`);
@@ -171,6 +175,34 @@ export function GoalCreatePage() {
                 onChange={(v) => setBudget((b) => ({ ...b, max_context_tokens: v }))}
               />
             </div>
+          </GlassCard>
+
+          <GlassCard className="mt-[18px]">
+            <div className="mb-3.5 text-[11px] font-bold uppercase tracking-wide text-mut">
+              Dataset
+            </div>
+            {datasets.length === 0 ? (
+              <p className="text-[13px] text-mut">
+                No datasets uploaded — the loop runs against the read-only DB only. Add one
+                under <b>Datasets</b>.
+              </p>
+            ) : (
+              <select
+                aria-label="Dataset"
+                value={datasetId}
+                onChange={(e) => setDatasetId(e.target.value)}
+                className="w-full rounded-xl border border-[var(--line2)] bg-white/[0.03] px-3.5 py-2.5 text-[14px] text-ink outline-none focus:border-[#cdbcff]"
+              >
+                <option value="" className="bg-bg0">
+                  None (DB only)
+                </option>
+                {datasets.map((d) => (
+                  <option key={d.id} value={d.id} className="bg-bg0">
+                    {d.name} · {d.kind}
+                  </option>
+                ))}
+              </select>
+            )}
           </GlassCard>
 
           <GlassCard className="mt-[18px]">

@@ -308,3 +308,35 @@ A goal → LLM clarifies → LLM **designs the agents + prompts** → run execut
 Sync + work: `git -C ../loopforge-be merge main` then implement on your branch.
 `pytest tests/ -q`. Suggest committing in stages (planner → runner → artifact content).
 **Loop Spec "Reject" still NOT in scope** (pending arbiter).
+
+---
+
+# Codex brief — Datasets (bring-your-own data files)
+
+Let users upload a CSV/Parquet dataset, profile it, and attach it to a goal so the loop runs
+against real data (not only the read-only DB). The frontend (Datasets page + goal picker) is
+already built and renders whatever you return; keep the contract in `openapi.yaml` unchanged.
+
+1. **Storage:** a `datasets` entity (SQLite + InMemory): `id, name, filename, kind (csv|parquet),
+   size_bytes, status (uploaded|profiling|ready|failed), profile (JSON|null), detail (str|null),
+   created_at`. Store the uploaded file under a server-managed path (NOT in the repo / NOT
+   web-served). `name` defaults to the filename.
+2. **Endpoints** (per contract): `POST /api/datasets` (multipart `file` + optional `name`) →
+   `201 Dataset` (status `uploaded`/`profiling`, profile null until done); `GET /api/datasets`;
+   `GET /api/datasets/{id}` (with profile); `DELETE /api/datasets/{id}` (also deletes the file).
+   Reject non-CSV/Parquet → `415`; enforce a max size cap → `413`.
+3. **Profiling:** read the file (pandas/pyarrow) and produce `DatasetProfile {row_count,
+   column_count, columns[]}`. Each `DatasetColumn`: `name, dtype, null_count, unique_count,
+   sample[], pii_masked`. **PII masking is mandatory** — never let raw values leave the server
+   (guardrail #10): detect likely-PII columns (email/phone/name/id-like / high-cardinality
+   string) and mask sample values (e.g. `10xxxx`), set `pii_masked=true`. Sample ≤ ~5 values.
+4. **Runtime use:** when a goal has `dataset_id`, **mount the file read-only into the sandbox**
+   (`/workspace/data/<filename>`, read-only — `/workspace` itself stays writable per FR-SEC-1)
+   so agent code can `pandas.read_csv(...)` it. Do **not** add a DB driver; this is a flat file.
+   Expose its presence/profile to the planner so the LLM designs the loop around real columns.
+5. **Security:** no host access beyond the managed store; size/row caps; keep raw values out of
+   profiles, traces, logs, and LLM context (masked only).
+
+Pairs with the REAL AGENT ENGINE brief (the engine analyzes the mounted dataset).
+Sync: `git -C ../loopforge-be merge main`. Tests per endpoint; `pytest tests/ -q`
+(including a security test: uploaded data is mounted **read-only** and raw PII never leaks).

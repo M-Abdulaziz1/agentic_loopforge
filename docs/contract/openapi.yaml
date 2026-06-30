@@ -506,6 +506,60 @@ paths:
               schema: { $ref: "#/components/schemas/LLMTestResult" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /api/datasets:
+    get:
+      operationId: listDatasets
+      summary: List uploaded datasets (samples are PII-masked)
+      responses:
+        "200":
+          description: Datasets
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Dataset" }
+    post:
+      operationId: uploadDataset
+      summary: Upload a CSV/Parquet dataset; profiled async, mounted read-only into the sandbox
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+                name: { type: string, description: "Display name; defaults to the filename." }
+      responses:
+        "201":
+          description: Created (status=uploaded|profiling until profiled)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Dataset" }
+        "413": { $ref: "#/components/responses/ValidationError" }
+        "415": { $ref: "#/components/responses/ValidationError" }
+
+  /api/datasets/{datasetId}:
+    parameters:
+      - { name: datasetId, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getDataset
+      summary: Get one dataset with its profile (PII-masked column samples)
+      responses:
+        "200":
+          description: Dataset
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Dataset" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      operationId: deleteDataset
+      summary: Delete a dataset and its stored file
+      responses:
+        "204": { description: Deleted }
+        "404": { $ref: "#/components/responses/NotFound" }
+
 components:
   responses:
     NotFound:
@@ -564,6 +618,9 @@ components:
         llm_provider_id:
           anyOf: [{ type: string }, { type: "null" }]
           description: Provider to run this goal with; null = the configured default.
+        dataset_id:
+          anyOf: [{ type: string }, { type: "null" }]
+          description: Dataset to mount read-only into the sandbox; null = none / DB-only.
 
     Goal:
       allOf:
@@ -974,3 +1031,54 @@ components:
           anyOf: [{ type: string }, { type: "null" }]
         model:
           anyOf: [{ type: string }, { type: "null" }]
+
+    DatasetKind:
+      type: string
+      enum: [csv, parquet]
+
+    DatasetStatus:
+      type: string
+      enum: [uploaded, profiling, ready, failed]
+
+    DatasetColumn:
+      type: object
+      description: Sample values MUST be PII-masked before leaving the server.
+      required: [name, dtype, null_count, unique_count, sample, pii_masked]
+      properties:
+        name: { type: string }
+        dtype: { type: string }
+        null_count: { type: integer }
+        unique_count: { type: integer }
+        sample:
+          type: array
+          items: { type: string }
+        pii_masked: { type: boolean }
+
+    DatasetProfile:
+      type: object
+      required: [row_count, column_count, columns]
+      properties:
+        row_count: { type: integer }
+        column_count: { type: integer }
+        columns:
+          type: array
+          items: { $ref: "#/components/schemas/DatasetColumn" }
+
+    Dataset:
+      type: object
+      required: [id, name, filename, kind, size_bytes, status, created_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        filename: { type: string }
+        kind: { $ref: "#/components/schemas/DatasetKind" }
+        size_bytes: { type: integer }
+        status: { $ref: "#/components/schemas/DatasetStatus" }
+        profile:
+          anyOf:
+            - { $ref: "#/components/schemas/DatasetProfile" }
+            - { type: "null" }
+        detail:
+          anyOf: [{ type: string }, { type: "null" }]
+          description: Error or status detail (e.g. why profiling failed).
+        created_at: { type: string, format: date-time }

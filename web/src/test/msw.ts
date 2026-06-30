@@ -2,6 +2,7 @@ import { setupServer } from "msw/node";
 import { http, HttpResponse } from "msw";
 import {
   sampleClarification,
+  sampleDataset,
   sampleGate,
   sampleGoal,
   sampleLoopSpec,
@@ -78,6 +79,15 @@ export const handlers = [
   http.post("/api/llm-providers/:id/test", () =>
     HttpResponse.json({ ok: true, model: sampleProvider.model }),
   ),
+  http.get("/api/datasets", () => HttpResponse.json([sampleDataset])),
+  http.get("/api/datasets/:id", () => HttpResponse.json(sampleDataset)),
+  http.post("/api/datasets", () =>
+    HttpResponse.json(
+      { ...sampleDataset, id: "ds_new", status: "profiling", profile: null },
+      { status: 201 },
+    ),
+  ),
+  http.delete("/api/datasets/:id", () => new HttpResponse(null, { status: 204 })),
 ];
 
 export const server = setupServer(...handlers);

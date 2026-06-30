@@ -3,6 +3,7 @@ import type {
   Artifact,
   ArtifactContent,
   ClarificationSession,
+  Dataset,
   Gate,
   Goal,
   LLMProvider,
@@ -222,6 +223,26 @@ export const sampleArtifactContent: ArtifactContent = {
   language: "python",
   content:
     "import pandas as pd\nfrom scipy import stats\n\ndf = load('customers_q2')\n# chi-square: support tickets vs churn\nprint(stats.chi2_contingency(pd.crosstab(df.tickets_gt3, df.churned)))\n",
+};
+
+export const sampleDataset: Dataset = {
+  id: "ds_customers_q2",
+  name: "customers_q2",
+  filename: "customers_q2.csv",
+  kind: "csv",
+  size_bytes: 1_482_240,
+  status: "ready",
+  detail: null,
+  profile: {
+    row_count: 4812,
+    column_count: 3,
+    columns: [
+      { name: "customer_id", dtype: "int64", null_count: 0, unique_count: 4812, sample: ["10xxxx", "10xxxx", "10xxxx"], pii_masked: true },
+      { name: "tenure_days", dtype: "int64", null_count: 0, unique_count: 612, sample: ["12", "340", "88"], pii_masked: false },
+      { name: "churned", dtype: "bool", null_count: 0, unique_count: 2, sample: ["true", "false", "false"], pii_masked: false },
+    ],
+  },
+  created_at: "2026-06-30T09:00:00Z",
 };
 
 export const sampleProvider: LLMProvider = {

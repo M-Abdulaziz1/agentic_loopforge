@@ -34,6 +34,37 @@ export type GoalCreate = {
   constraints: Record<string, unknown>;
   budget: Budget;
   llm_provider_id?: string | null;
+  dataset_id?: string | null;
+};
+
+export type DatasetKind = "csv" | "parquet";
+export type DatasetStatus = "uploaded" | "profiling" | "ready" | "failed";
+
+export type DatasetColumn = {
+  name: string;
+  dtype: string;
+  null_count: number;
+  unique_count: number;
+  sample: string[]; // PII-masked sample values
+  pii_masked: boolean;
+};
+
+export type DatasetProfile = {
+  row_count: number;
+  column_count: number;
+  columns: DatasetColumn[];
+};
+
+export type Dataset = {
+  id: string;
+  name: string;
+  filename: string;
+  kind: DatasetKind;
+  size_bytes: number;
+  status: DatasetStatus;
+  profile: DatasetProfile | null;
+  detail: string | null;
+  created_at: string;
 };
 
 export type LLMProviderKind = "openai_compatible" | "anthropic";
