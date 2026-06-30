@@ -229,6 +229,34 @@ Persist templates in the SQLite store like other entities. Tests per endpoint;
   `LoopTemplateCreate` schemas.
 - **2026-06-30 — add artifact content.** `GET /api/artifacts/{id}/content` + `ArtifactContent`
   schema, so the UI can view/extract generated code.
+- **2026-06-30 — add LLM provider management.** `GET/POST /api/llm-providers`,
+  `GET/PATCH/DELETE /api/llm-providers/{id}`, `POST /api/llm-providers/{id}/test`, schemas
+  `LLMProvider(+Create/+Update)`, `LLMProviderKind`, `LLMTestResult`; plus optional
+  `llm_provider_id` on `GoalCreate`. Lets users define/edit LLMs in the UI and pick one per goal.
+
+---
+
+# Codex brief — LLM provider management (UI-configurable LLMs)
+
+Let users define LLM providers in the app (Settings) and run goals with a chosen one,
+instead of only env vars.
+
+1. **Storage:** a `llm_providers` entity (SQLite + InMemory): `id, name, kind
+   (openai_compatible|anthropic), base_url, model, timeout_seconds, is_default, created_at`,
+   plus an **encrypted** `api_key`. **Never return the api_key** — responses use `has_api_key`
+   only (see `LLMProvider` schema). Setting `is_default=true` unsets it on others.
+2. **Endpoints:** CRUD per `openapi.yaml` (`/api/llm-providers...`). `PATCH` updates the key
+   only if `api_key` is provided. `POST /{id}/test` does a minimal live call (e.g. tiny
+   completion) and returns `LLMTestResult {ok, detail?, model?}` — never leak the key in
+   `detail`.
+3. **Use at runtime:** when starting a run, build the LLM provider from the goal's
+   `llm_provider_id`; else the `is_default` provider; else fall back to env. Wire this into
+   `build_llm_provider`/the run path so the **real agent engine** uses the selected provider.
+4. **Security:** encrypt keys at rest (reuse the secret/KMS approach), keep them out of logs,
+   traces, and error messages (guardrail FR-SEC-7).
+
+Pairs with the REAL AGENT ENGINE brief above (same engine consumes the selected provider).
+Sync: `git -C ../loopforge-be merge main`. Tests per endpoint; `pytest tests/ -q`.
 
 ---
 

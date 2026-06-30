@@ -430,6 +430,82 @@ paths:
               schema: { $ref: "#/components/schemas/ArtifactContent" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /api/llm-providers:
+    get:
+      operationId: listLlmProviders
+      summary: List configured LLM providers (API keys never returned)
+      responses:
+        "200":
+          description: Providers
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/LLMProvider" }
+    post:
+      operationId: createLlmProvider
+      summary: Add an LLM provider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LLMProviderCreate" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LLMProvider" }
+
+  /api/llm-providers/{providerId}:
+    parameters:
+      - { name: providerId, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getLlmProvider
+      summary: Get one provider (no API key)
+      responses:
+        "200":
+          description: Provider
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LLMProvider" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      operationId: updateLlmProvider
+      summary: Update a provider (api_key only changed if provided)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LLMProviderUpdate" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LLMProvider" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      operationId: deleteLlmProvider
+      summary: Delete a provider
+      responses:
+        "204": { description: Deleted }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/llm-providers/{providerId}/test:
+    parameters:
+      - { name: providerId, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: testLlmProvider
+      summary: Test connectivity to the provider
+      responses:
+        "200":
+          description: Test result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LLMTestResult" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
 components:
   responses:
     NotFound:
@@ -485,6 +561,9 @@ components:
         toggles: { $ref: "#/components/schemas/GoalToggles" }
         constraints: { type: object, additionalProperties: true }
         budget: { $ref: "#/components/schemas/Budget" }
+        llm_provider_id:
+          anyOf: [{ type: string }, { type: "null" }]
+          description: Provider to run this goal with; null = the configured default.
 
     Goal:
       allOf:
@@ -842,3 +921,56 @@ components:
         language:
           anyOf: [{ type: string }, { type: "null" }]
         content: { type: string }
+
+    LLMProviderKind:
+      type: string
+      enum: [openai_compatible, anthropic]
+
+    LLMProvider:
+      type: object
+      description: API keys are never returned; `has_api_key` indicates one is stored.
+      required: [id, name, kind, model, is_default, has_api_key, created_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        kind: { $ref: "#/components/schemas/LLMProviderKind" }
+        base_url:
+          anyOf: [{ type: string }, { type: "null" }]
+        model: { type: string }
+        timeout_seconds: { type: number }
+        is_default: { type: boolean }
+        has_api_key: { type: boolean }
+        created_at: { type: string, format: date-time }
+
+    LLMProviderCreate:
+      type: object
+      required: [name, kind, model]
+      properties:
+        name: { type: string }
+        kind: { $ref: "#/components/schemas/LLMProviderKind" }
+        base_url: { type: string }
+        model: { type: string }
+        api_key: { type: string }
+        timeout_seconds: { type: number }
+        is_default: { type: boolean }
+
+    LLMProviderUpdate:
+      type: object
+      description: Any provided field replaces the existing one; omit api_key to keep it.
+      properties:
+        name: { type: string }
+        base_url: { type: string }
+        model: { type: string }
+        api_key: { type: string }
+        timeout_seconds: { type: number }
+        is_default: { type: boolean }
+
+    LLMTestResult:
+      type: object
+      required: [ok]
+      properties:
+        ok: { type: boolean }
+        detail:
+          anyOf: [{ type: string }, { type: "null" }]
+        model:
+          anyOf: [{ type: string }, { type: "null" }]
