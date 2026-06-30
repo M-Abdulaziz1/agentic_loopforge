@@ -3,6 +3,7 @@ import { http, HttpResponse } from "msw";
 import {
   sampleClarification,
   sampleDataset,
+  sampleEvaluator,
   sampleGate,
   sampleGoal,
   sampleLoopSpec,
@@ -88,6 +89,13 @@ export const handlers = [
     ),
   ),
   http.delete("/api/datasets/:id", () => new HttpResponse(null, { status: 204 })),
+  http.get("/api/evaluators", () => HttpResponse.json([sampleEvaluator])),
+  http.get("/api/evaluators/:id", () => HttpResponse.json(sampleEvaluator)),
+  http.post("/api/evaluators", () =>
+    HttpResponse.json({ ...sampleEvaluator, id: "eval_new" }, { status: 201 }),
+  ),
+  http.patch("/api/evaluators/:id", () => HttpResponse.json(sampleEvaluator)),
+  http.delete("/api/evaluators/:id", () => new HttpResponse(null, { status: 204 })),
 ];
 
 export const server = setupServer(...handlers);

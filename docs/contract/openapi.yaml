@@ -560,6 +560,68 @@ paths:
         "204": { description: Deleted }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /api/evaluators:
+    get:
+      operationId: listEvaluators
+      summary: List evaluators (frozen success metrics the loop can optimize)
+      responses:
+        "200":
+          description: Evaluators
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Evaluator" }
+    post:
+      operationId: createEvaluator
+      summary: Define an evaluator
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EvaluatorCreate" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Evaluator" }
+
+  /api/evaluators/{evaluatorId}:
+    parameters:
+      - { name: evaluatorId, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getEvaluator
+      summary: Get one evaluator
+      responses:
+        "200":
+          description: Evaluator
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Evaluator" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      operationId: updateEvaluator
+      summary: Update an evaluator (only before a run has frozen it)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EvaluatorUpdate" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Evaluator" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      operationId: deleteEvaluator
+      summary: Delete an evaluator
+      responses:
+        "204": { description: Deleted }
+        "404": { $ref: "#/components/responses/NotFound" }
+
 components:
   responses:
     NotFound:
@@ -583,6 +645,14 @@ components:
     GoalMode:
       type: string
       enum: [offline_local, online_enabled]
+
+    AutonomyLevel:
+      type: string
+      description: >
+        How short the leash is (Karpathy's autonomy slider). Maps to the HITL gates the
+        planner inserts: manual=gate every stage, checkpointed=before training+finalize,
+        supervised=before finalize only, autonomous=no gates (runs to budget).
+      enum: [manual, checkpointed, supervised, autonomous]
 
     RunStatus:
       type: string
@@ -621,6 +691,11 @@ components:
         dataset_id:
           anyOf: [{ type: string }, { type: "null" }]
           description: Dataset to mount read-only into the sandbox; null = none / DB-only.
+        evaluator_id:
+          anyOf: [{ type: string }, { type: "null" }]
+          description: Frozen success metric the loop optimizes; null = the default evaluator.
+        autonomy:
+          $ref: "#/components/schemas/AutonomyLevel"
 
     Goal:
       allOf:
@@ -1063,6 +1138,64 @@ components:
         columns:
           type: array
           items: { $ref: "#/components/schemas/DatasetColumn" }
+
+    EvaluatorKind:
+      type: string
+      description: >
+        statistical_insight = significance + effect size + multiple-comparison correction;
+        ml_baseline = beat a baseline on held-out data + leakage check; custom_metric = a
+        user metric computed by sandbox code; llm_rubric = an LLM judges against a rubric.
+      enum: [statistical_insight, ml_baseline, custom_metric, llm_rubric]
+
+    EvaluatorDirection:
+      type: string
+      enum: [minimize, maximize]
+
+    Evaluator:
+      type: object
+      description: A frozen success metric the loop optimizes (Karpathy's immutable yardstick, generalized).
+      required: [id, name, kind, is_default, created_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        kind: { $ref: "#/components/schemas/EvaluatorKind" }
+        metric_name:
+          anyOf: [{ type: string }, { type: "null" }]
+        direction:
+          anyOf:
+            - { $ref: "#/components/schemas/EvaluatorDirection" }
+            - { type: "null" }
+        target:
+          anyOf: [{ type: number }, { type: "null" }]
+          description: Threshold that counts as "winning"; null = beat baseline / pass validation.
+        config:
+          type: object
+          additionalProperties: true
+          description: Kind-specific settings (alpha & correction; baseline & leakage; rubric).
+        is_default: { type: boolean }
+        created_at: { type: string, format: date-time }
+
+    EvaluatorCreate:
+      type: object
+      required: [name, kind]
+      properties:
+        name: { type: string }
+        kind: { $ref: "#/components/schemas/EvaluatorKind" }
+        metric_name: { type: string }
+        direction: { $ref: "#/components/schemas/EvaluatorDirection" }
+        target: { type: number }
+        config: { type: object, additionalProperties: true }
+        is_default: { type: boolean }
+
+    EvaluatorUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        metric_name: { type: string }
+        direction: { $ref: "#/components/schemas/EvaluatorDirection" }
+        target: { type: number }
+        config: { type: object, additionalProperties: true }
+        is_default: { type: boolean }
 
     Dataset:
       type: object

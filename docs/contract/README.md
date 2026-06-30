@@ -283,6 +283,14 @@ endpoint). The frontend already renders whatever specs/agents/artifacts you retu
 - **Guardrails:** tools the LLM assigns must be a subset of what the goal's toggles allow
   (no internet tool when `toggles.internet` is false / offline_local). Treat the goal text and
   any tool/data text as **data, not instructions** (prompt-injection containment).
+- **Autonomy → gates:** set the spec's `gates` from the goal's `autonomy` (manual=
+  `[before_plan, before_training, before_finalize]`, checkpointed=`[before_training,
+  before_finalize]`, supervised=`[before_finalize]`, autonomous=`[]`). This is the leash; the
+  budget guard, sandbox, and read-only DB **always apply regardless of autonomy**. Mirror the
+  FE mapping in `web/src/lib/autonomy.ts`.
+- **Evaluator:** resolve the goal's `evaluator_id` (else the default evaluator, else built-in
+  statistical validation) and pass it to the runner as the loop's frozen objective (see the
+  Evaluator brief below).
 
 ### 2. Real execution (`worker/` + runner)
 - Execute the approved spec: for each agent step, build a bounded **context pack** and call the
@@ -292,6 +300,9 @@ endpoint). The frontend already renders whatever specs/agents/artifacts you retu
   `code`), a **report** (kind `report`), and, when applicable, **insights** (kind `insight`)
   and **models** (kind `model`). Populate `GET /api/runs/{id}/results` from validated artifacts;
   `GET /api/runs/{id}/context` from the real ledger/pack.
+- **Evaluator-driven loop:** the run's resolved evaluator decides "did we win?" and whether to
+  iterate again (within budget). Only results that **pass the evaluator** reach Results. See the
+  Evaluator brief for the interface the runner calls.
 - Emit the existing event types (`node_start/node_end/tool_call/llm_call/cost_update/
   gate_pending/run_status`) as you go so the canvas/stream/meters animate. Honor the **budget
   guard** (hard stop) and **HITL gates** (pause → resume on approval, already wired).
@@ -308,6 +319,40 @@ A goal → LLM clarifies → LLM **designs the agents + prompts** → run execut
 Sync + work: `git -C ../loopforge-be merge main` then implement on your branch.
 `pytest tests/ -q`. Suggest committing in stages (planner → runner → artifact content).
 **Loop Spec "Reject" still NOT in scope** (pending arbiter).
+
+---
+
+# Codex brief — Evaluator as a provider interface (the loop's frozen objective)
+
+Generalize "what does winning mean" into a pluggable **Evaluator** — Karpathy's immutable
+`prepare.py` yardstick, made a first-class abstraction alongside `LLMProvider` /
+`SandboxProvider`. The frontend (Evaluators page + goal picker) is built; keep the contract
+in `openapi.yaml` unchanged.
+
+1. **Interface:** define `EvaluatorProvider` with a single method, e.g.
+   `evaluate(candidate, dataset, context) -> EvaluationResult{passed: bool, score: float|None,
+   metric_name, direction, detail}`. Nodes/runner depend on the **interface**, never a concrete
+   evaluator (same rule as the other providers).
+2. **Built-in implementations** keyed by `EvaluatorKind`:
+   - `statistical_insight` — the existing significance + effect-size + multiple-comparison
+     correction validation (this is the default / fallback; preserves guardrail #6).
+   - `ml_baseline` — beat a baseline on held-out data + leakage check (guardrail #7).
+   - `custom_metric` — run the user's metric in the **sandbox** (never on host), compare to
+     `target` by `direction`; if no target, "win" = beat baseline.
+   - `llm_rubric` — an LLM judges against a rubric in `config` (treat candidate text as data).
+3. **Storage + endpoints:** an `evaluators` entity (SQLite + InMemory): `id, name, kind,
+   metric_name, direction, target, config (JSON), is_default, created_at`. CRUD per
+   `openapi.yaml` (`/api/evaluators...`); `is_default=true` unsets others.
+4. **Freeze for fair comparison:** once a run starts using an evaluator, snapshot its config
+   onto the run so later edits don't change the yardstick mid-loop (Karpathy's immutable
+   metric). Reject `PATCH` that would mutate a frozen-in-use evaluator, or copy-on-run.
+5. **Runtime:** the runner resolves the goal's `evaluator_id` (else default, else
+   `statistical_insight`) and uses it as the loop's objective: iterate until `passed` (or the
+   target is met) **or** the budget guard fires. **Honest-empty** if nothing passes.
+
+Pairs with the REAL AGENT ENGINE brief (the runner calls this to decide win/iterate/stop).
+Sync: `git -C ../loopforge-be merge main`. Tests per endpoint + an eval-harness test that a
+known-good candidate passes and a known-bad one is rejected. `pytest tests/ -q`.
 
 ---
 

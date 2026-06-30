@@ -4,6 +4,7 @@ import type {
   ArtifactContent,
   ClarificationSession,
   Dataset,
+  Evaluator,
   Gate,
   Goal,
   LLMProvider,
@@ -242,6 +243,18 @@ export const sampleDataset: Dataset = {
       { name: "churned", dtype: "bool", null_count: 0, unique_count: 2, sample: ["true", "false", "false"], pii_masked: false },
     ],
   },
+  created_at: "2026-06-30T09:00:00Z",
+};
+
+export const sampleEvaluator: Evaluator = {
+  id: "eval_churn_auc",
+  name: "Churn ROC-AUC beats baseline",
+  kind: "ml_baseline",
+  metric_name: "roc_auc",
+  direction: "maximize",
+  target: null,
+  config: { baseline: "logistic_regression", leakage_check: true },
+  is_default: true,
   created_at: "2026-06-30T09:00:00Z",
 };
 

@@ -29,6 +29,9 @@ const TemplatesPage = lazy(() =>
 const DatasetsPage = lazy(() =>
   import("../pages/DatasetsPage").then((m) => ({ default: m.DatasetsPage })),
 );
+const EvaluatorsPage = lazy(() =>
+  import("../pages/EvaluatorsPage").then((m) => ({ default: m.EvaluatorsPage })),
+);
 const SettingsPage = lazy(() =>
   import("../pages/SettingsPage").then((m) => ({ default: m.SettingsPage })),
 );
@@ -59,6 +62,7 @@ export function AppRoutes() {
         <Route path="/specs/:specId/edit" element={<LoopBuilderPage />} />
         <Route path="/templates" element={<TemplatesPage />} />
         <Route path="/datasets" element={<DatasetsPage />} />
+        <Route path="/evaluators" element={<EvaluatorsPage />} />
         <Route
           path="/runs"
           element={<RunsListPage title="Runs" to={(id) => `/runs/${id}`} />}
