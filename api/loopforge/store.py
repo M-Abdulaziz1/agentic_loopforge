@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from api.loopforge.domain import Artifact, AuditEvent, ClarificationSession, ContextEntry, Gate, GateStatus, Goal, LoopSpec, LoopTemplate, Run, RunEvent, StoredLLMProvider
+from api.loopforge.domain import Artifact, AuditEvent, ClarificationSession, ContextEntry, Gate, GateStatus, Goal, LoopSpec, LoopTemplate, Run, RunEvent, StoredDataset, StoredLLMProvider
 
 
 class Store(Protocol):
@@ -23,6 +23,10 @@ class Store(Protocol):
     def list_llm_providers(self) -> list[StoredLLMProvider]: ...
     def get_default_llm_provider(self) -> StoredLLMProvider | None: ...
     def delete_llm_provider(self, provider_id: str) -> None: ...
+    def save_dataset(self, dataset: StoredDataset) -> StoredDataset: ...
+    def get_dataset(self, dataset_id: str) -> StoredDataset: ...
+    def list_datasets(self) -> list[StoredDataset]: ...
+    def delete_dataset(self, dataset_id: str) -> StoredDataset: ...
     def save_run(self, run: Run) -> Run: ...
     def get_run(self, run_id: str) -> Run: ...
     def list_runs(self) -> list[Run]: ...
@@ -45,6 +49,7 @@ class InMemoryStore:
         self.loop_specs: dict[str, LoopSpec] = {}
         self.templates: dict[str, LoopTemplate] = {}
         self.llm_providers: dict[str, StoredLLMProvider] = {}
+        self.datasets: dict[str, StoredDataset] = {}
         self.runs: dict[str, Run] = {}
         self.events: dict[str, list[RunEvent]] = {}
         self.artifacts: dict[str, list[Artifact]] = {}
@@ -115,6 +120,19 @@ class InMemoryStore:
 
     def delete_llm_provider(self, provider_id: str) -> None:
         del self.llm_providers[provider_id]
+
+    def save_dataset(self, dataset: StoredDataset) -> StoredDataset:
+        self.datasets[dataset.id] = dataset
+        return dataset
+
+    def get_dataset(self, dataset_id: str) -> StoredDataset:
+        return self.datasets[dataset_id]
+
+    def list_datasets(self) -> list[StoredDataset]:
+        return sorted(self.datasets.values(), key=lambda dataset: dataset.created_at, reverse=True)
+
+    def delete_dataset(self, dataset_id: str) -> StoredDataset:
+        return self.datasets.pop(dataset_id)
 
     def save_run(self, run: Run) -> Run:
         self.runs[run.id] = run

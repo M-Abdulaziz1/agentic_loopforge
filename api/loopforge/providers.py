@@ -84,6 +84,12 @@ class FakeLLMProvider:
 
 
 @dataclass(frozen=True)
+class DatasetMount:
+    host_path: str | Path
+    filename: str
+
+
+@dataclass(frozen=True)
 class SandboxResult:
     exit_code: int
     stdout: str
@@ -91,7 +97,7 @@ class SandboxResult:
 
 
 class SandboxProvider(Protocol):
-    def run_code(self, code: str, *, timeout_seconds: int) -> SandboxResult:
+    def run_code(self, code: str, *, timeout_seconds: int, dataset_mount: DatasetMount | dict[str, object] | None = None) -> SandboxResult:
         raise NotImplementedError
 
 
@@ -119,9 +125,10 @@ class DockerGvisorSandboxProvider:
         self.cpus = cpus
         self.command_runner = command_runner or self._run_subprocess
 
-    def run_code(self, code: str, *, timeout_seconds: int) -> SandboxResult:
+    def run_code(self, code: str, *, timeout_seconds: int, dataset_mount: DatasetMount | dict[str, object] | None = None) -> SandboxResult:
         workspace = self.workspace_root / uuid4().hex
         workspace.mkdir(parents=True, exist_ok=False)
+        (workspace / "data").mkdir(parents=True, exist_ok=True)
         script = workspace / "main.py"
         script.write_text(code, encoding="utf-8")
 
@@ -142,12 +149,17 @@ class DockerGvisorSandboxProvider:
             f"--cpus={self.cpus}",
             "-v",
             f"{workspace}:/workspace:rw",
+        ]
+        mount = _normalize_dataset_mount(dataset_mount)
+        if mount is not None:
+            command.extend(["-v", f"{Path(mount.host_path)}:/workspace/data/{Path(mount.filename).name}:ro"])
+        command.extend([
             "-w",
             "/workspace",
             self.image,
             "python",
             "/workspace/main.py",
-        ]
+        ])
         try:
             completed = self.command_runner(command, timeout_seconds)
         except subprocess.TimeoutExpired as exc:
@@ -172,6 +184,14 @@ class DockerGvisorSandboxProvider:
 class FakeSandboxProvider:
     executions: list[str] = field(default_factory=list)
 
-    def run_code(self, code: str, *, timeout_seconds: int) -> SandboxResult:
+    def run_code(self, code: str, *, timeout_seconds: int, dataset_mount: DatasetMount | dict[str, object] | None = None) -> SandboxResult:
         self.executions.append(code)
         return SandboxResult(exit_code=0, stdout="sandbox execution simulated")
+
+
+def _normalize_dataset_mount(mount: DatasetMount | dict[str, object] | None) -> DatasetMount | None:
+    if mount is None:
+        return None
+    if isinstance(mount, DatasetMount):
+        return mount
+    return DatasetMount(host_path=mount["host_path"], filename=str(mount["filename"]))

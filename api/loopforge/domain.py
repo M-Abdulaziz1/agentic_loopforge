@@ -64,6 +64,7 @@ class GoalCreate(BaseModel):
     constraints: dict[str, Any] = Field(default_factory=dict)
     budget: Budget = Field(default_factory=Budget)
     llm_provider_id: str | None = None
+    dataset_id: str | None = None
 
 
 class Goal(GoalCreate):
@@ -210,6 +211,49 @@ class LLMTestResult(BaseModel):
     ok: bool
     detail: str | None = None
     model: str | None = None
+
+
+class DatasetKind(StrEnum):
+    CSV = "csv"
+    PARQUET = "parquet"
+
+
+class DatasetStatus(StrEnum):
+    UPLOADED = "uploaded"
+    PROFILING = "profiling"
+    READY = "ready"
+    FAILED = "failed"
+
+
+class DatasetColumn(BaseModel):
+    name: str
+    dtype: str
+    null_count: int
+    unique_count: int
+    sample: list[str]
+    pii_masked: bool
+
+
+class DatasetProfile(BaseModel):
+    row_count: int
+    column_count: int
+    columns: list[DatasetColumn]
+
+
+class Dataset(BaseModel):
+    id: str = Field(default_factory=lambda: new_id("dataset"))
+    name: str
+    filename: str
+    kind: DatasetKind
+    size_bytes: int
+    status: DatasetStatus = DatasetStatus.UPLOADED
+    profile: DatasetProfile | None = None
+    detail: str | None = None
+    created_at: datetime = Field(default_factory=now_utc)
+
+
+class StoredDataset(Dataset):
+    storage_path: str
 
 
 class GoalCreateResult(BaseModel):

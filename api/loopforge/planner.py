@@ -8,6 +8,7 @@ from api.loopforge.domain import (
     Goal,
     GoalMode,
     LoopSpec,
+    StoredDataset,
     LoopSpecAgent,
     RunStatus,
     ToolPermission,
@@ -43,8 +44,8 @@ class LoopPlanner:
             return ClarityResult(status=RunStatus.NEEDS_CLARIFICATION, session=session)
         return ClarityResult(status=RunStatus.PENDING_APPROVAL)
 
-    def generate_spec(self, goal: Goal) -> LoopSpec:
-        self.llm.complete(system="loop-planner", prompt=goal.text)
+    def generate_spec(self, goal: Goal, dataset: StoredDataset | None = None) -> LoopSpec:
+        self.llm.complete(system="loop-planner", prompt=_planner_prompt(goal, dataset))
         permissions = [
             ToolPermission(tool_name="local_workspace", enabled=True, reason="Store run artifacts"),
             ToolPermission(tool_name="code_sandbox", enabled=goal.toggles.code_sandbox, reason="Run generated code safely"),
@@ -96,3 +97,17 @@ class LoopPlanner:
         if normalized in vague_phrases or len(normalized.split()) < 6:
             return ["desired outcome", "success criteria"]
         return []
+
+
+def _planner_prompt(goal: Goal, dataset: StoredDataset | None) -> str:
+    if dataset is None:
+        return goal.text
+    profile = dataset.profile.model_dump() if dataset.profile is not None else None
+    return (
+        f"{goal.text}\n\n"
+        "Dataset available for this goal. Use only this masked profile for planning; "
+        "raw dataset values are mounted later in the sandbox.\n"
+        f"Dataset filename: {dataset.filename}\n"
+        f"Dataset kind: {dataset.kind}\n"
+        f"Masked profile: {profile}"
+    )

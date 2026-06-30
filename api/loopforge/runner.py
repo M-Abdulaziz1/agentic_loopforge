@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from api.loopforge.context import ContextManager
 from api.loopforge.domain import ContextEntry, Gate, Goal, LoopSpec, Run, RunEvent, RunStatus, now_utc
-from api.loopforge.providers import LLMProvider, SandboxProvider
+from api.loopforge.providers import DatasetMount, LLMProvider, SandboxProvider
 from api.loopforge.store import Store
 from api.loopforge.tools import ToolRegistry
 
@@ -15,11 +15,13 @@ class LoopRunner:
         llm: LLMProvider,
         sandbox: SandboxProvider,
         tools: ToolRegistry,
+        dataset_mount: DatasetMount | None = None,
     ) -> None:
         self.store = store
         self.llm = llm
         self.sandbox = sandbox
         self.tools = tools
+        self.dataset_mount = dataset_mount
 
     def start(self, goal: Goal, spec: LoopSpec) -> Run:
         run = self.store.save_run(
@@ -36,6 +38,15 @@ class LoopRunner:
 
         context_manager = ContextManager(max_tokens=goal.budget.max_context_tokens)
         self.store.append_context(ContextEntry(run_id=run.id, kind="goal", text=goal.text, tags=["goal", "required"]))
+        if self.dataset_mount is not None:
+            self.store.append_context(
+                ContextEntry(
+                    run_id=run.id,
+                    kind="dataset",
+                    text=f"Dataset mounted read-only at /workspace/data/{self.dataset_mount.filename}",
+                    tags=["dataset", "required"],
+                )
+            )
         pack = context_manager.build_pack(
             self.store.list_context(run.id),
             task="execute approved loop",
