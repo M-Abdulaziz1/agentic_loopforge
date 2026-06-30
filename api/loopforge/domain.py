@@ -21,6 +21,13 @@ class GoalMode(StrEnum):
     ONLINE_ENABLED = "online_enabled"
 
 
+class AutonomyLevel(StrEnum):
+    MANUAL = "manual"
+    CHECKPOINTED = "checkpointed"
+    SUPERVISED = "supervised"
+    AUTONOMOUS = "autonomous"
+
+
 class RunStatus(StrEnum):
     COMPLETED = "completed"
     NEEDS_CLARIFICATION = "needs_clarification"
@@ -63,6 +70,10 @@ class GoalCreate(BaseModel):
     toggles: GoalToggles = Field(default_factory=GoalToggles)
     constraints: dict[str, Any] = Field(default_factory=dict)
     budget: Budget = Field(default_factory=Budget)
+    llm_provider_id: str | None = None
+    dataset_id: str | None = None
+    evaluator_id: str | None = None
+    autonomy: AutonomyLevel = AutonomyLevel.CHECKPOINTED
 
 
 class Goal(GoalCreate):
@@ -155,6 +166,154 @@ class LoopTemplate(BaseModel):
     context_policy: dict[str, Any]
     improvement_strategy: str
     created_at: datetime = Field(default_factory=now_utc)
+
+
+class LLMProviderKind(StrEnum):
+    OPENAI_COMPATIBLE = "openai_compatible"
+    ANTHROPIC = "anthropic"
+
+
+class LLMProviderCreate(BaseModel):
+    name: str
+    kind: LLMProviderKind
+    base_url: str | None = None
+    model: str
+    api_key: str | None = None
+    timeout_seconds: float = Field(default=60.0, gt=0)
+    is_default: bool = False
+
+
+class LLMProviderUpdate(BaseModel):
+    name: str | None = None
+    base_url: str | None = None
+    model: str | None = None
+    api_key: str | None = None
+    timeout_seconds: float | None = Field(default=None, gt=0)
+    is_default: bool | None = None
+
+
+class StoredLLMProvider(BaseModel):
+    id: str = Field(default_factory=lambda: new_id("llm_provider"))
+    name: str
+    kind: LLMProviderKind
+    base_url: str | None = None
+    model: str
+    encrypted_api_key: str | None = None
+    timeout_seconds: float = Field(default=60.0, gt=0)
+    is_default: bool = False
+    created_at: datetime = Field(default_factory=now_utc)
+
+
+class LLMProvider(BaseModel):
+    id: str
+    name: str
+    kind: LLMProviderKind
+    base_url: str | None = None
+    model: str
+    timeout_seconds: float
+    is_default: bool
+    has_api_key: bool
+    created_at: datetime
+
+
+class LLMTestResult(BaseModel):
+    ok: bool
+    detail: str | None = None
+    model: str | None = None
+
+
+class EvaluatorKind(StrEnum):
+    STATISTICAL_INSIGHT = "statistical_insight"
+    ML_BASELINE = "ml_baseline"
+    CUSTOM_METRIC = "custom_metric"
+    LLM_RUBRIC = "llm_rubric"
+
+
+class EvaluatorDirection(StrEnum):
+    MINIMIZE = "minimize"
+    MAXIMIZE = "maximize"
+
+
+class EvaluatorCreate(BaseModel):
+    name: str
+    kind: EvaluatorKind
+    metric_name: str | None = None
+    direction: EvaluatorDirection | None = None
+    target: float | None = None
+    config: dict[str, Any] = Field(default_factory=dict)
+    is_default: bool = False
+
+
+class EvaluatorUpdate(BaseModel):
+    name: str | None = None
+    metric_name: str | None = None
+    direction: EvaluatorDirection | None = None
+    target: float | None = None
+    config: dict[str, Any] | None = None
+    is_default: bool | None = None
+
+
+class Evaluator(EvaluatorCreate):
+    id: str = Field(default_factory=lambda: new_id("evaluator"))
+    created_at: datetime = Field(default_factory=now_utc)
+
+
+class EvaluationResult(BaseModel):
+    passed: bool
+    score: float | None = None
+    metric_name: str | None = None
+    direction: EvaluatorDirection | None = None
+    detail: str | None = None
+
+
+class ArtifactContent(BaseModel):
+    artifact_id: str
+    filename: str | None = None
+    language: str | None = None
+    content: str
+
+
+class DatasetKind(StrEnum):
+    CSV = "csv"
+    PARQUET = "parquet"
+
+
+class DatasetStatus(StrEnum):
+    UPLOADED = "uploaded"
+    PROFILING = "profiling"
+    READY = "ready"
+    FAILED = "failed"
+
+
+class DatasetColumn(BaseModel):
+    name: str
+    dtype: str
+    null_count: int
+    unique_count: int
+    sample: list[str]
+    pii_masked: bool
+
+
+class DatasetProfile(BaseModel):
+    row_count: int
+    column_count: int
+    columns: list[DatasetColumn]
+
+
+class Dataset(BaseModel):
+    id: str = Field(default_factory=lambda: new_id("dataset"))
+    name: str
+    filename: str
+    kind: DatasetKind
+    size_bytes: int
+    status: DatasetStatus = DatasetStatus.UPLOADED
+    profile: DatasetProfile | None = None
+    detail: str | None = None
+    created_at: datetime = Field(default_factory=now_utc)
+
+
+class StoredDataset(Dataset):
+    storage_path: str
 
 
 class GoalCreateResult(BaseModel):

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from api.loopforge.domain import Artifact, AuditEvent, ClarificationSession, ContextEntry, Gate, GateStatus, Goal, LoopSpec, LoopTemplate, Run, RunEvent
+from api.loopforge.domain import Artifact, AuditEvent, ClarificationSession, ContextEntry, Evaluator, Gate, GateStatus, Goal, LoopSpec, LoopTemplate, Run, RunEvent, StoredDataset, StoredLLMProvider
 
 
 class Store(Protocol):
@@ -18,6 +18,20 @@ class Store(Protocol):
     def get_template(self, template_id: str) -> LoopTemplate: ...
     def list_templates(self) -> list[LoopTemplate]: ...
     def delete_template(self, template_id: str) -> None: ...
+    def save_llm_provider(self, provider: StoredLLMProvider) -> StoredLLMProvider: ...
+    def get_llm_provider(self, provider_id: str) -> StoredLLMProvider: ...
+    def list_llm_providers(self) -> list[StoredLLMProvider]: ...
+    def get_default_llm_provider(self) -> StoredLLMProvider | None: ...
+    def delete_llm_provider(self, provider_id: str) -> None: ...
+    def save_dataset(self, dataset: StoredDataset) -> StoredDataset: ...
+    def get_dataset(self, dataset_id: str) -> StoredDataset: ...
+    def list_datasets(self) -> list[StoredDataset]: ...
+    def delete_dataset(self, dataset_id: str) -> StoredDataset: ...
+    def save_evaluator(self, evaluator: Evaluator) -> Evaluator: ...
+    def get_evaluator(self, evaluator_id: str) -> Evaluator: ...
+    def list_evaluators(self) -> list[Evaluator]: ...
+    def get_default_evaluator(self) -> Evaluator | None: ...
+    def delete_evaluator(self, evaluator_id: str) -> None: ...
     def save_run(self, run: Run) -> Run: ...
     def get_run(self, run_id: str) -> Run: ...
     def list_runs(self) -> list[Run]: ...
@@ -39,6 +53,9 @@ class InMemoryStore:
         self.goals: dict[str, Goal] = {}
         self.loop_specs: dict[str, LoopSpec] = {}
         self.templates: dict[str, LoopTemplate] = {}
+        self.llm_providers: dict[str, StoredLLMProvider] = {}
+        self.datasets: dict[str, StoredDataset] = {}
+        self.evaluators: dict[str, Evaluator] = {}
         self.runs: dict[str, Run] = {}
         self.events: dict[str, list[RunEvent]] = {}
         self.artifacts: dict[str, list[Artifact]] = {}
@@ -89,6 +106,59 @@ class InMemoryStore:
 
     def delete_template(self, template_id: str) -> None:
         del self.templates[template_id]
+
+    def save_llm_provider(self, provider: StoredLLMProvider) -> StoredLLMProvider:
+        if provider.is_default:
+            for existing_id, existing in list(self.llm_providers.items()):
+                if existing_id != provider.id and existing.is_default:
+                    self.llm_providers[existing_id] = existing.model_copy(update={"is_default": False})
+        self.llm_providers[provider.id] = provider
+        return provider
+
+    def get_llm_provider(self, provider_id: str) -> StoredLLMProvider:
+        return self.llm_providers[provider_id]
+
+    def list_llm_providers(self) -> list[StoredLLMProvider]:
+        return sorted(self.llm_providers.values(), key=lambda provider: provider.created_at, reverse=True)
+
+    def get_default_llm_provider(self) -> StoredLLMProvider | None:
+        return next((provider for provider in self.llm_providers.values() if provider.is_default), None)
+
+    def delete_llm_provider(self, provider_id: str) -> None:
+        del self.llm_providers[provider_id]
+
+    def save_dataset(self, dataset: StoredDataset) -> StoredDataset:
+        self.datasets[dataset.id] = dataset
+        return dataset
+
+    def get_dataset(self, dataset_id: str) -> StoredDataset:
+        return self.datasets[dataset_id]
+
+    def list_datasets(self) -> list[StoredDataset]:
+        return sorted(self.datasets.values(), key=lambda dataset: dataset.created_at, reverse=True)
+
+    def delete_dataset(self, dataset_id: str) -> StoredDataset:
+        return self.datasets.pop(dataset_id)
+
+    def save_evaluator(self, evaluator: Evaluator) -> Evaluator:
+        if evaluator.is_default:
+            for existing_id, existing in list(self.evaluators.items()):
+                if existing_id != evaluator.id and existing.is_default:
+                    self.evaluators[existing_id] = existing.model_copy(update={"is_default": False})
+        self.evaluators[evaluator.id] = evaluator
+        return evaluator
+
+    def get_evaluator(self, evaluator_id: str) -> Evaluator:
+        return self.evaluators[evaluator_id]
+
+    def list_evaluators(self) -> list[Evaluator]:
+        return sorted(self.evaluators.values(), key=lambda evaluator: evaluator.created_at, reverse=True)
+
+    def get_default_evaluator(self) -> Evaluator | None:
+        return next((evaluator for evaluator in self.evaluators.values() if evaluator.is_default), None)
+
+    def delete_evaluator(self, evaluator_id: str) -> None:
+        del self.evaluators[evaluator_id]
 
     def save_run(self, run: Run) -> Run:
         self.runs[run.id] = run

@@ -7,7 +7,7 @@ from typing import TypeVar
 
 from pydantic import BaseModel
 
-from api.loopforge.domain import Artifact, AuditEvent, ClarificationSession, ContextEntry, Gate, GateStatus, Goal, LoopSpec, LoopTemplate, Run, RunEvent
+from api.loopforge.domain import Artifact, AuditEvent, ClarificationSession, ContextEntry, Evaluator, Gate, GateStatus, Goal, LoopSpec, LoopTemplate, Run, RunEvent, StoredDataset, StoredLLMProvider
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
 
@@ -83,6 +83,73 @@ class SQLiteStore:
             self._connection.commit()
         if cursor.rowcount == 0:
             raise KeyError(template_id)
+
+    def save_llm_provider(self, provider: StoredLLMProvider) -> StoredLLMProvider:
+        if provider.is_default:
+            for existing in self.list_llm_providers():
+                if existing.id != provider.id and existing.is_default:
+                    self._save("llm_provider", existing.model_copy(update={"is_default": False}))
+        self._save("llm_provider", provider)
+        return provider
+
+    def get_llm_provider(self, provider_id: str) -> StoredLLMProvider:
+        return self._get("llm_provider", provider_id, StoredLLMProvider)
+
+    def list_llm_providers(self) -> list[StoredLLMProvider]:
+        return sorted(self._list("llm_provider", StoredLLMProvider), key=lambda provider: provider.created_at, reverse=True)
+
+    def get_default_llm_provider(self) -> StoredLLMProvider | None:
+        return next((provider for provider in self.list_llm_providers() if provider.is_default), None)
+
+    def delete_llm_provider(self, provider_id: str) -> None:
+        with self._lock:
+            cursor = self._connection.execute("DELETE FROM records WHERE kind = ? AND id = ?", ("llm_provider", provider_id))
+            self._connection.commit()
+        if cursor.rowcount == 0:
+            raise KeyError(provider_id)
+
+    def save_dataset(self, dataset: StoredDataset) -> StoredDataset:
+        self._save("dataset", dataset)
+        return dataset
+
+    def get_dataset(self, dataset_id: str) -> StoredDataset:
+        return self._get("dataset", dataset_id, StoredDataset)
+
+    def list_datasets(self) -> list[StoredDataset]:
+        return sorted(self._list("dataset", StoredDataset), key=lambda dataset: dataset.created_at, reverse=True)
+
+    def delete_dataset(self, dataset_id: str) -> StoredDataset:
+        dataset = self.get_dataset(dataset_id)
+        with self._lock:
+            cursor = self._connection.execute("DELETE FROM records WHERE kind = ? AND id = ?", ("dataset", dataset_id))
+            self._connection.commit()
+        if cursor.rowcount == 0:
+            raise KeyError(dataset_id)
+        return dataset
+
+    def save_evaluator(self, evaluator: Evaluator) -> Evaluator:
+        if evaluator.is_default:
+            for existing in self.list_evaluators():
+                if existing.id != evaluator.id and existing.is_default:
+                    self._save("evaluator", existing.model_copy(update={"is_default": False}))
+        self._save("evaluator", evaluator)
+        return evaluator
+
+    def get_evaluator(self, evaluator_id: str) -> Evaluator:
+        return self._get("evaluator", evaluator_id, Evaluator)
+
+    def list_evaluators(self) -> list[Evaluator]:
+        return sorted(self._list("evaluator", Evaluator), key=lambda evaluator: evaluator.created_at, reverse=True)
+
+    def get_default_evaluator(self) -> Evaluator | None:
+        return next((evaluator for evaluator in self.list_evaluators() if evaluator.is_default), None)
+
+    def delete_evaluator(self, evaluator_id: str) -> None:
+        with self._lock:
+            cursor = self._connection.execute("DELETE FROM records WHERE kind = ? AND id = ?", ("evaluator", evaluator_id))
+            self._connection.commit()
+        if cursor.rowcount == 0:
+            raise KeyError(evaluator_id)
 
     def save_run(self, run: Run) -> Run:
         self._save("run", run, goal_id=run.goal_id)

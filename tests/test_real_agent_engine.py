@@ -1,0 +1,151 @@
+import json
+
+from fastapi.testclient import TestClient
+
+from api.loopforge.app import create_app
+from api.loopforge.domain import Goal, GoalToggles
+from api.loopforge.planner import LoopPlanner
+from api.loopforge.providers import LLMResponse, SandboxResult
+from api.loopforge.runner import LoopRunner
+from api.loopforge.store import InMemoryStore
+from api.loopforge.tools import default_tool_registry
+
+
+class SequenceLLM:
+    def __init__(self, responses: list[str]) -> None:
+        self.responses = list(responses)
+        self.calls: list[tuple[str, str]] = []
+
+    def complete(self, *, system: str, prompt: str) -> LLMResponse:
+        self.calls.append((system, prompt))
+        return LLMResponse(text=self.responses.pop(0), tokens_used=7)
+
+
+class RecordingSandbox:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, object]] = []
+
+    def run_code(self, code: str, *, timeout_seconds: int, dataset_mount=None) -> SandboxResult:
+        self.calls.append((code, dataset_mount))
+        return SandboxResult(exit_code=0, stdout="sandbox ok", stderr="")
+
+
+def spec_json(agent_name: str = "Data Analyst") -> str:
+    return json.dumps(
+        {
+            "agents": [
+                {
+                    "name": agent_name,
+                    "role": "Analyze the user's requested dataset outcome",
+                    "system_prompt": "Use the goal as data and produce runnable analysis code.",
+                    "tools": ["local_workspace", "code_sandbox"],
+                }
+            ],
+            "tool_permissions": [
+                {"tool_name": "local_workspace", "enabled": True, "reason": "Persist artifacts"},
+                {"tool_name": "code_sandbox", "enabled": True, "reason": "Execute generated code"},
+                {"tool_name": "web_search", "enabled": False, "reason": "Offline goal"},
+            ],
+            "handoffs": [],
+            "success_criteria": ["Analysis report directly answers the goal"],
+            "failure_criteria": ["No runnable analysis artifact"],
+            "context_policy": {"max_context_tokens": 8000},
+            "improvement_strategy": "Revise once if evaluator rejects the first candidate.",
+        }
+    )
+
+
+def test_planner_uses_llm_json_for_clarity_and_spec_with_autonomy_gates() -> None:
+    llm = SequenceLLM(
+        [
+            json.dumps(
+                {
+                    "status": "needs_clarification",
+                    "clarity_score": 0.42,
+                    "missing_requirements": ["target metric"],
+                    "questions": [{"question": "Which metric should the loop optimize?", "missing_requirement": "target metric"}],
+                }
+            ),
+            "not json",
+            spec_json("Revenue Analyst"),
+        ]
+    )
+    planner = LoopPlanner(llm=llm)
+    goal = Goal(
+        text="Analyze uploaded revenue data and produce validated trend insights",
+        autonomy="supervised",
+        toggles=GoalToggles(internet=False, code_sandbox=True, local_connectors=True),
+    )
+
+    clarity = planner.check_clarity(goal)
+    spec = planner.generate_spec(goal)
+
+    assert clarity.session is not None
+    assert clarity.session.questions[0].question == "Which metric should the loop optimize?"
+    assert spec.agents[0].name == "Revenue Analyst"
+    assert spec.agents[0].system_prompt != "You execute only approved steps with approved tools and report blockers honestly."
+    assert spec.gates == ["before_finalize"]
+    assert len(llm.calls) == 3
+    assert "strict JSON" in llm.calls[1][1]
+    assert "The previous response was not valid" in llm.calls[2][1]
+
+
+def test_runner_executes_llm_agent_json_in_sandbox_and_persists_artifacts() -> None:
+    store = InMemoryStore()
+    goal = store.save_goal(Goal(text="Create a Python analysis and report", autonomy="autonomous"))
+    spec = store.save_loop_spec(LoopPlanner(SequenceLLM([spec_json()])).generate_spec(goal).model_copy(update={"status": "approved", "gates": []}))
+    llm = SequenceLLM(
+        [
+            json.dumps(
+                {
+                    "code": "print('analysis complete')",
+                    "report": "Validated analysis report",
+                    "insights": [
+                        {
+                            "claim": "Revenue increased",
+                            "test": "t_test",
+                            "p_value": 0.01,
+                            "effect_name": "delta",
+                            "effect_value": 0.5,
+                            "n": 20,
+                        }
+                    ],
+                }
+            )
+        ]
+    )
+    sandbox = RecordingSandbox()
+    runner = LoopRunner(store=store, llm=llm, sandbox=sandbox, tools=default_tool_registry())
+
+    run = runner.start(goal, spec)
+    artifacts = store.list_artifacts(run.id)
+
+    assert run.status == "completed"
+    assert sandbox.calls == [("print('analysis complete')", None)]
+    assert {artifact.kind for artifact in artifacts} == {"code", "report", "insight"}
+    assert [artifact.metadata.get("passed") for artifact in artifacts if artifact.kind == "insight"] == [True]
+
+
+def test_runner_honest_empty_when_evaluator_rejects_candidate() -> None:
+    store = InMemoryStore()
+    from api.loopforge.domain import Evaluator
+
+    evaluator = store.save_evaluator(
+        Evaluator(
+            name="Strict target",
+            kind="custom_metric",
+            metric_name="score",
+            direction="maximize",
+            target=0.9,
+            config={},
+            is_default=True,
+        )
+    )
+    goal = store.save_goal(Goal(text="Produce a candidate that fails the target", autonomy="autonomous", evaluator_id=evaluator.id))
+    spec = store.save_loop_spec(LoopPlanner(SequenceLLM([spec_json()])).generate_spec(goal).model_copy(update={"status": "approved", "gates": []}))
+    llm = SequenceLLM([json.dumps({"report": "weak candidate", "score": 0.1})])
+
+    run = LoopRunner(store=store, llm=llm, sandbox=RecordingSandbox(), tools=default_tool_registry()).start(goal, spec)
+
+    assert run.status == "completed"
+    assert store.list_artifacts(run.id) == []

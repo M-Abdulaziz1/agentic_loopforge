@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 import re
+import shutil
 import sqlite3
 
 from fastapi import FastAPI, HTTPException, Request
@@ -18,6 +20,13 @@ from api.loopforge.domain import (
     ClarificationStatus,
     ContextEntry,
     ContextPack,
+    Dataset,
+    DatasetKind,
+    DatasetStatus,
+    Evaluator,
+    EvaluatorCreate,
+    EvaluatorUpdate,
+    ArtifactContent,
     Gate,
     GateDecision,
     GateStatus,
@@ -25,6 +34,10 @@ from api.loopforge.domain import (
     GoalCreate,
     GoalCreateResult,
     InsightResult,
+    LLMProvider as LLMProviderView,
+    LLMProviderCreate,
+    LLMProviderUpdate,
+    LLMTestResult,
     LoopSpec,
     LoopSpecUpdate,
     LoopTemplate,
@@ -38,12 +51,17 @@ from api.loopforge.domain import (
     RunEvent,
     RunStartRequest,
     RunStatus,
+    StoredDataset,
+    StoredLLMProvider,
     now_utc,
 )
 from api.loopforge.context import ContextManager
+from api.loopforge.datasets import parse_multipart_upload, profile_csv, safe_dataset_filename
 from api.loopforge.planner import LoopPlanner
 from api.loopforge.runner import LoopRunner
-from api.loopforge.runtime import create_llm_provider, create_sandbox_provider
+from api.loopforge.providers import DatasetMount, LLMProviderError
+from api.loopforge.runtime import create_llm_provider, create_llm_provider_from_config, create_sandbox_provider
+from api.loopforge.secrets import SecretCipher
 from api.loopforge.settings import Settings
 from api.loopforge.sqlite_store import SQLiteStore
 from api.loopforge.store import InMemoryStore, Store
@@ -72,6 +90,7 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
     store = store or InMemoryStore()
     llm = create_llm_provider(settings)
     planner = LoopPlanner(llm=llm)
+    secret_cipher = SecretCipher(settings.secret_key)
     sandbox = create_sandbox_provider(settings)
     tools = default_tool_registry()
 
@@ -81,6 +100,16 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
 
     @app.post("/api/goals", status_code=201)
     def create_goal(payload: GoalCreate) -> GoalCreateResult:
+        if payload.dataset_id is not None:
+            try:
+                store.get_dataset(payload.dataset_id)
+            except KeyError as exc:
+                raise HTTPException(status_code=404, detail="Dataset not found") from exc
+        if payload.evaluator_id is not None:
+            try:
+                store.get_evaluator(payload.evaluator_id)
+            except KeyError as exc:
+                raise HTTPException(status_code=404, detail="Evaluator not found") from exc
         goal = store.save_goal(Goal(**payload.model_dump()))
         clarity = planner.check_clarity(goal)
         goal = goal.model_copy(update={"status": clarity.status})
@@ -90,7 +119,7 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
             _audit(store, "goal.create", "goal", goal.id, {"status": goal.status})
             return GoalCreateResult(goal=goal, clarification=session, loop_spec=None)
 
-        spec = store.save_loop_spec(planner.generate_spec(goal))
+        spec = store.save_loop_spec(planner.generate_spec(goal, dataset=_dataset_for_goal(store, goal)))
         _audit(store, "goal.create", "goal", goal.id, {"status": goal.status, "loop_spec_id": spec.id})
         return GoalCreateResult(goal=goal, clarification=None, loop_spec=spec)
 
@@ -136,7 +165,7 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
             goal = goal.model_copy(update={"status": RunStatus.PENDING_APPROVAL})
             store.save_goal(goal)
             store.save_clarification(session)
-            spec = store.save_loop_spec(planner.generate_spec(goal))
+            spec = store.save_loop_spec(planner.generate_spec(goal, dataset=_dataset_for_goal(store, goal)))
             return ClarificationResult(clarification=session, loop_spec=spec)
 
         session = session.model_copy(update={"answers": answers, "clarity_score": 0.55})
@@ -242,6 +271,156 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
         _audit(store, "template.delete", "template", templateId, {})
         return None
 
+    @app.get("/api/llm-providers")
+    def list_llm_providers() -> list[LLMProviderView]:
+        return [_public_llm_provider(provider) for provider in store.list_llm_providers()]
+
+    @app.post("/api/llm-providers", status_code=201)
+    def create_llm_provider_record(payload: LLMProviderCreate) -> LLMProviderView:
+        provider = StoredLLMProvider(
+            name=payload.name,
+            kind=payload.kind,
+            base_url=payload.base_url,
+            model=payload.model,
+            encrypted_api_key=secret_cipher.encrypt(payload.api_key),
+            timeout_seconds=payload.timeout_seconds,
+            is_default=payload.is_default,
+        )
+        saved = store.save_llm_provider(provider)
+        _audit(store, "llm_provider.create", "llm_provider", saved.id, {"kind": saved.kind, "model": saved.model, "is_default": saved.is_default})
+        return _public_llm_provider(saved)
+
+    @app.get("/api/llm-providers/{providerId}")
+    def get_llm_provider_record(providerId: str) -> LLMProviderView:
+        try:
+            return _public_llm_provider(store.get_llm_provider(providerId))
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="LLM provider not found") from exc
+
+    @app.patch("/api/llm-providers/{providerId}")
+    def update_llm_provider_record(providerId: str, payload: LLMProviderUpdate) -> LLMProviderView:
+        try:
+            provider = store.get_llm_provider(providerId)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="LLM provider not found") from exc
+
+        update = payload.model_dump(exclude_unset=True)
+        if "api_key" in update:
+            update["encrypted_api_key"] = secret_cipher.encrypt(update.pop("api_key"))
+        saved = store.save_llm_provider(provider.model_copy(update=update))
+        _audit(store, "llm_provider.update", "llm_provider", saved.id, {"is_default": saved.is_default})
+        return _public_llm_provider(saved)
+
+    @app.delete("/api/llm-providers/{providerId}", status_code=204)
+    def delete_llm_provider_record(providerId: str) -> None:
+        try:
+            store.delete_llm_provider(providerId)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="LLM provider not found") from exc
+        _audit(store, "llm_provider.delete", "llm_provider", providerId, {})
+        return None
+
+    @app.post("/api/llm-providers/{providerId}/test")
+    def test_llm_provider_record(providerId: str) -> LLMTestResult:
+        try:
+            provider = store.get_llm_provider(providerId)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="LLM provider not found") from exc
+        try:
+            llm_to_test = create_llm_provider_from_config(provider, settings)
+            llm_to_test.complete(system="loopforge-provider-test", prompt="Reply with OK.")
+        except LLMProviderError as exc:
+            return LLMTestResult(ok=False, detail=_sanitize_provider_detail(str(exc), provider, settings), model=provider.model)
+        except Exception as exc:
+            return LLMTestResult(ok=False, detail=_sanitize_provider_detail(str(exc), provider, settings), model=provider.model)
+        return LLMTestResult(ok=True, detail="Provider test succeeded", model=provider.model)
+
+    @app.get("/api/datasets")
+    def list_datasets() -> list[Dataset]:
+        return [_public_dataset(dataset) for dataset in store.list_datasets()]
+
+    @app.post("/api/datasets", status_code=201)
+    async def upload_dataset(request: Request) -> Dataset:
+        upload = _parse_dataset_request(request.headers.get("content-type", ""), await request.body())
+        filename = safe_dataset_filename(upload.filename)
+        kind = _dataset_kind(filename)
+        if kind is None:
+            raise HTTPException(status_code=415, detail="Only CSV and Parquet datasets are supported")
+        if len(upload.content) > settings.dataset_max_size_bytes:
+            raise HTTPException(status_code=413, detail="Dataset exceeds the configured size limit")
+
+        dataset = StoredDataset(
+            name=upload.name or filename,
+            filename=filename,
+            kind=kind,
+            size_bytes=len(upload.content),
+            storage_path="",
+        )
+        dataset_dir = Path(settings.dataset_storage_path) / dataset.id
+        dataset_dir.mkdir(parents=True, exist_ok=False)
+        storage_path = dataset_dir / filename
+        storage_path.write_bytes(upload.content)
+        dataset = dataset.model_copy(update={"storage_path": str(storage_path), "status": DatasetStatus.PROFILING})
+        dataset = _profile_dataset(dataset)
+        saved = store.save_dataset(dataset)
+        _audit(store, "dataset.create", "dataset", saved.id, {"filename": saved.filename, "kind": saved.kind, "size_bytes": saved.size_bytes})
+        return _public_dataset(saved)
+
+    @app.get("/api/datasets/{datasetId}")
+    def get_dataset(datasetId: str) -> Dataset:
+        try:
+            return _public_dataset(store.get_dataset(datasetId))
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Dataset not found") from exc
+
+    @app.delete("/api/datasets/{datasetId}", status_code=204)
+    def delete_dataset(datasetId: str) -> None:
+        try:
+            dataset = store.delete_dataset(datasetId)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Dataset not found") from exc
+        shutil.rmtree(Path(dataset.storage_path).parent, ignore_errors=True)
+        _audit(store, "dataset.delete", "dataset", datasetId, {})
+        return None
+
+    @app.get("/api/evaluators")
+    def list_evaluators() -> list[Evaluator]:
+        return store.list_evaluators()
+
+    @app.post("/api/evaluators", status_code=201)
+    def create_evaluator(payload: EvaluatorCreate) -> Evaluator:
+        evaluator = store.save_evaluator(Evaluator(**payload.model_dump()))
+        _audit(store, "evaluator.create", "evaluator", evaluator.id, {"kind": evaluator.kind, "is_default": evaluator.is_default})
+        return evaluator
+
+    @app.get("/api/evaluators/{evaluatorId}")
+    def get_evaluator(evaluatorId: str) -> Evaluator:
+        try:
+            return store.get_evaluator(evaluatorId)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Evaluator not found") from exc
+
+    @app.patch("/api/evaluators/{evaluatorId}")
+    def update_evaluator(evaluatorId: str, payload: EvaluatorUpdate) -> Evaluator:
+        if _is_evaluator_frozen(store, evaluatorId):
+            raise HTTPException(status_code=409, detail="Evaluator is frozen by an existing run")
+        try:
+            evaluator = store.get_evaluator(evaluatorId)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Evaluator not found") from exc
+        updated = store.save_evaluator(evaluator.model_copy(update=payload.model_dump(exclude_unset=True)))
+        _audit(store, "evaluator.update", "evaluator", updated.id, {"is_default": updated.is_default})
+        return updated
+
+    @app.delete("/api/evaluators/{evaluatorId}", status_code=204)
+    def delete_evaluator(evaluatorId: str) -> None:
+        try:
+            store.delete_evaluator(evaluatorId)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Evaluator not found") from exc
+        _audit(store, "evaluator.delete", "evaluator", evaluatorId, {})
+        return None
+
     @app.post("/api/goals/{goalId}/runs", status_code=201)
     def start_run(goalId: str, payload: RunStartRequest) -> Run:
         try:
@@ -253,9 +432,19 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
             raise HTTPException(status_code=404, detail="Goal or loop spec not found")
         if spec.status != "approved":
             raise HTTPException(status_code=409, detail="Loop spec must be approved before running")
-        runner = LoopRunner(store=store, llm=llm, sandbox=sandbox, tools=tools)
+        evaluator = _evaluator_for_goal(store, goal)
+        runner = LoopRunner(
+            store=store,
+            llm=_llm_for_goal(store, settings, goal),
+            sandbox=sandbox,
+            tools=tools,
+            dataset_mount=_dataset_mount_for_goal(store, goal),
+            evaluator=evaluator,
+        )
         run = runner.start(goal, spec)
         _audit(store, "run.start", "run", run.id, {"goal_id": goal.id, "loop_spec_id": spec.id, "status": run.status})
+        if evaluator is not None:
+            _audit(store, "evaluator.freeze", "evaluator", evaluator.id, {"run_id": run.id, "snapshot": evaluator.model_dump(mode="json")})
         return run
 
     @app.get("/api/runs")
@@ -350,6 +539,20 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
             pack=_sanitize_context_pack(pack),
         )
 
+    @app.get("/api/artifacts/{artifactId}/content")
+    def get_artifact_content(artifactId: str) -> ArtifactContent:
+        for run in store.list_runs():
+            for artifact in store.list_artifacts(run.id):
+                if artifact.id == artifactId:
+                    metadata = _sanitize_value(artifact.metadata)
+                    return ArtifactContent(
+                        artifact_id=artifact.id,
+                        filename=metadata.get("filename") if isinstance(metadata.get("filename"), str) else None,
+                        language=metadata.get("language") if isinstance(metadata.get("language"), str) else None,
+                        content=str(metadata.get("content") or ""),
+                    )
+        raise HTTPException(status_code=404, detail="Artifact not found")
+
     @app.get("/api/gates")
     def list_gates(status: GateStatus | None = None, run_id: str | None = None) -> list[Gate]:
         return store.list_gates(status=status, run_id=run_id)
@@ -387,11 +590,110 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
                 spec = store.get_loop_spec(run.loop_spec_id)
             except KeyError as exc:
                 raise HTTPException(status_code=404, detail="Run goal or loop spec not found") from exc
-            runner = LoopRunner(store=store, llm=llm, sandbox=sandbox, tools=tools)
+            runner = LoopRunner(
+                store=store,
+                llm=_llm_for_goal(store, settings, goal),
+                sandbox=sandbox,
+                tools=tools,
+                dataset_mount=_dataset_mount_for_goal(store, goal),
+                evaluator=_evaluator_for_goal(store, goal),
+            )
             runner.resume_after_gate(run, goal, spec)
         return decided
 
     return app
+
+
+def _evaluator_for_goal(store: Store, goal: Goal) -> Evaluator | None:
+    if goal.evaluator_id is not None:
+        return store.get_evaluator(goal.evaluator_id)
+    return store.get_default_evaluator()
+
+
+def _is_evaluator_frozen(store: Store, evaluator_id: str) -> bool:
+    return any(event.action == "evaluator.freeze" and event.subject_id == evaluator_id for event in store.list_audit_events())
+
+
+def _dataset_mount_for_goal(store: Store, goal: Goal) -> DatasetMount | None:
+    dataset = _dataset_for_goal(store, goal)
+    if dataset is None:
+        return None
+    return DatasetMount(host_path=dataset.storage_path, filename=dataset.filename)
+
+
+def _dataset_for_goal(store: Store, goal: Goal) -> StoredDataset | None:
+    if goal.dataset_id is None:
+        return None
+    return store.get_dataset(goal.dataset_id)
+
+
+def _parse_dataset_request(content_type: str, body: bytes):
+    try:
+        return parse_multipart_upload(content_type, body)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+def _dataset_kind(filename: str) -> DatasetKind | None:
+    suffix = Path(filename).suffix.lower()
+    if suffix == ".csv":
+        return DatasetKind.CSV
+    if suffix == ".parquet":
+        return DatasetKind.PARQUET
+    return None
+
+
+def _profile_dataset(dataset: StoredDataset) -> StoredDataset:
+    if dataset.kind == DatasetKind.CSV:
+        try:
+            profile = profile_csv(Path(dataset.storage_path))
+        except Exception as exc:
+            return dataset.model_copy(update={"status": DatasetStatus.FAILED, "detail": f"CSV profiling failed: {exc}"})
+        return dataset.model_copy(update={"status": DatasetStatus.READY, "profile": profile, "detail": None})
+    return dataset.model_copy(update={"status": DatasetStatus.FAILED, "detail": "Parquet profiling requires pyarrow or pandas, which is not installed"})
+
+
+def _public_dataset(dataset: StoredDataset) -> Dataset:
+    data = dataset.model_dump(exclude={"storage_path"})
+    if data.get("profile") is not None:
+        data["profile"] = _sanitize_value(data["profile"])
+    return Dataset.model_validate(data)
+
+
+def _public_llm_provider(provider: StoredLLMProvider) -> LLMProviderView:
+    return LLMProviderView(
+        id=provider.id,
+        name=provider.name,
+        kind=provider.kind,
+        base_url=provider.base_url,
+        model=provider.model,
+        timeout_seconds=provider.timeout_seconds,
+        is_default=provider.is_default,
+        has_api_key=provider.encrypted_api_key is not None,
+        created_at=provider.created_at,
+    )
+
+
+def _llm_for_goal(store: Store, settings: Settings, goal: Goal):
+    try:
+        if goal.llm_provider_id:
+            return create_llm_provider_from_config(store.get_llm_provider(goal.llm_provider_id), settings)
+        default_provider = store.get_default_llm_provider()
+        if default_provider is not None:
+            return create_llm_provider_from_config(default_provider, settings)
+        return create_llm_provider(settings)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="LLM provider not found") from exc
+    except LLMProviderError as exc:
+        raise HTTPException(status_code=422, detail=_sanitize_provider_detail(str(exc), None, settings)) from exc
+
+
+def _sanitize_provider_detail(detail: str, provider: StoredLLMProvider | None, settings: Settings) -> str:
+    if provider is not None:
+        secret = SecretCipher(settings.secret_key).decrypt(provider.encrypted_api_key) if provider.encrypted_api_key else None
+        if secret:
+            detail = detail.replace(secret, "[REDACTED_SECRET]")
+    return re.sub(r"Bearer\s+[^\s]+", "Bearer [REDACTED_SECRET]", detail)
 
 
 def _validate_loop_spec(goal: Goal, spec: LoopSpec) -> None:

@@ -41,6 +41,24 @@ def test_docker_gvisor_provider_builds_constrained_docker_command(tmp_path) -> N
     assert "python:3.12-slim" in command
 
 
+def test_docker_gvisor_provider_mounts_dataset_read_only_under_workspace_data(tmp_path) -> None:
+    seen: dict[str, object] = {}
+    dataset = tmp_path / "customers.csv"
+    dataset.write_text("email\nmasked@example.com\n", encoding="utf-8")
+
+    def runner(command: list[str], timeout: int) -> subprocess.CompletedProcess[str]:
+        seen["command"] = command
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    provider = DockerGvisorSandboxProvider(workspace_root=tmp_path / "workspaces", command_runner=runner)
+
+    provider.run_code("print('ok')", timeout_seconds=3, dataset_mount={"host_path": dataset, "filename": "customers.csv"})
+    command = seen["command"]
+
+    assert any(mount.endswith(":/workspace:rw") for mount in command)
+    assert f"{dataset}:/workspace/data/customers.csv:ro" in command
+
+
 def test_docker_gvisor_provider_raises_clear_error_on_timeout(tmp_path) -> None:
     def runner(command: list[str], timeout: int) -> subprocess.CompletedProcess[str]:
         raise subprocess.TimeoutExpired(command, timeout)
