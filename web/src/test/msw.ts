@@ -1,6 +1,93 @@
 import { setupServer } from "msw/node";
 import { http, HttpResponse } from "msw";
+import {
+  sampleClarification,
+  sampleDataset,
+  sampleGate,
+  sampleGoal,
+  sampleLoopSpec,
+  sampleArtifact,
+  sampleArtifactContent,
+  sampleProvider,
+  sampleResults,
+  sampleRun,
+  sampleRunContext,
+  sampleRunEvents,
+  sampleTemplate,
+} from "./fixtures";
 
-export const server = setupServer(
-  http.get("/api/goals", () => HttpResponse.json([])),
-);
+// Default handlers conform to docs/contract/openapi.yaml. Individual tests override
+// with server.use(...) for specific scenarios.
+export const handlers = [
+  http.get("/api/goals", () => HttpResponse.json([sampleGoal])),
+  http.get("/api/goals/:goalId", () => HttpResponse.json(sampleGoal)),
+  http.post("/api/goals", () =>
+    HttpResponse.json(
+      { goal: sampleGoal, clarification: sampleClarification, loop_spec: null },
+      { status: 201 },
+    ),
+  ),
+  http.get("/api/goals/:goalId/clarification", () =>
+    HttpResponse.json(sampleClarification),
+  ),
+  http.post("/api/goals/:goalId/clarification/answers", () =>
+    HttpResponse.json({
+      clarification: { ...sampleClarification, clarity_score: 0.9, status: "ready" },
+      loop_spec: sampleLoopSpec,
+    }),
+  ),
+  http.get("/api/loop-specs", () => HttpResponse.json([sampleLoopSpec])),
+  http.get("/api/loop-specs/:specId", () => HttpResponse.json(sampleLoopSpec)),
+  http.patch("/api/loop-specs/:specId", () =>
+    HttpResponse.json({ ...sampleLoopSpec, version: sampleLoopSpec.version + 1 }),
+  ),
+  http.post("/api/loop-specs/:specId/approve", () =>
+    HttpResponse.json({ ...sampleLoopSpec, status: "approved" }),
+  ),
+  http.post("/api/goals/:goalId/runs", () =>
+    HttpResponse.json(sampleRun, { status: 201 }),
+  ),
+  http.get("/api/runs", () => HttpResponse.json([sampleRun])),
+  http.get("/api/runs/:runId", () => HttpResponse.json(sampleRun)),
+  http.post("/api/runs/:runId/cancel", () =>
+    HttpResponse.json({ ...sampleRun, status: "cancelled" }),
+  ),
+  http.post("/api/runs/:runId/pause", () => HttpResponse.json(sampleRun)),
+  http.get("/api/runs/:runId/events", () => HttpResponse.json(sampleRunEvents)),
+  http.get("/api/gates", () => HttpResponse.json([sampleGate])),
+  http.post("/api/gates/:gateId/decision", () =>
+    HttpResponse.json({ ...sampleGate, status: "approved" }),
+  ),
+  http.get("/api/runs/:runId/results", () => HttpResponse.json(sampleResults)),
+  http.get("/api/runs/:runId/context", () => HttpResponse.json(sampleRunContext)),
+  http.get("/api/runs/:runId/artifacts", () => HttpResponse.json([sampleArtifact])),
+  http.get("/api/artifacts/:artifactId/content", () =>
+    HttpResponse.json(sampleArtifactContent),
+  ),
+  http.get("/api/templates", () => HttpResponse.json([sampleTemplate])),
+  http.post("/api/templates", () => HttpResponse.json(sampleTemplate, { status: 201 })),
+  http.post("/api/templates/:templateId/instantiate", () =>
+    HttpResponse.json({ ...sampleLoopSpec, id: "spec_from_tpl" }, { status: 201 }),
+  ),
+  http.delete("/api/templates/:templateId", () => new HttpResponse(null, { status: 204 })),
+  http.get("/api/llm-providers", () => HttpResponse.json([sampleProvider])),
+  http.post("/api/llm-providers", () =>
+    HttpResponse.json({ ...sampleProvider, id: "llm_new" }, { status: 201 }),
+  ),
+  http.patch("/api/llm-providers/:id", () => HttpResponse.json(sampleProvider)),
+  http.delete("/api/llm-providers/:id", () => new HttpResponse(null, { status: 204 })),
+  http.post("/api/llm-providers/:id/test", () =>
+    HttpResponse.json({ ok: true, model: sampleProvider.model }),
+  ),
+  http.get("/api/datasets", () => HttpResponse.json([sampleDataset])),
+  http.get("/api/datasets/:id", () => HttpResponse.json(sampleDataset)),
+  http.post("/api/datasets", () =>
+    HttpResponse.json(
+      { ...sampleDataset, id: "ds_new", status: "profiling", profile: null },
+      { status: 201 },
+    ),
+  ),
+  http.delete("/api/datasets/:id", () => new HttpResponse(null, { status: 204 })),
+];
+
+export const server = setupServer(...handlers);

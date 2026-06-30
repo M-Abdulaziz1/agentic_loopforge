@@ -1,21 +1,26 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { Providers } from "./Providers";
 import { AppRoutes } from "./routes";
 
-test("renders the Runs page heading at /runs", () => {
+test("renders the Runs page heading at /runs", async () => {
   render(
-    <MemoryRouter initialEntries={["/runs"]}>
-      <AppRoutes />
-    </MemoryRouter>,
+    <Providers>
+      <MemoryRouter initialEntries={["/runs"]}>
+        <AppRoutes />
+      </MemoryRouter>
+    </Providers>,
   );
-  expect(screen.getByRole("heading", { name: "Runs" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Runs" })).toBeInTheDocument();
 });
 
-test("redirects / to Goals", () => {
+test("redirects / to Goals", async () => {
   render(
-    <MemoryRouter initialEntries={["/"]}>
-      <AppRoutes />
-    </MemoryRouter>,
+    <Providers>
+      <MemoryRouter initialEntries={["/"]}>
+        <AppRoutes />
+      </MemoryRouter>
+    </Providers>,
   );
-  expect(screen.getByRole("heading", { name: "Goals" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Goals" })).toBeInTheDocument();
 });

@@ -47,11 +47,19 @@ body {
     var(--bg0);
 }
 
+/* Keyboard focus ring (low specificity via :where so components can still style). */
+:where(a, button, input, textarea, select, [role="switch"], [tabindex]):focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation: none !important;
     transition: none !important;
+    scroll-behavior: auto !important;
   }
 }

@@ -227,3 +227,116 @@ Persist templates in the SQLite store like other entities. Tests per endpoint;
 - **2026-06-29 — add Templates slice (Plan 4).** Added `GET/POST /api/templates`,
   `POST /api/templates/{id}/instantiate`, `DELETE /api/templates/{id}` and `LoopTemplate`,
   `LoopTemplateCreate` schemas.
+- **2026-06-30 — add artifact content.** `GET /api/artifacts/{id}/content` + `ArtifactContent`
+  schema, so the UI can view/extract generated code.
+- **2026-06-30 — add LLM provider management.** `GET/POST /api/llm-providers`,
+  `GET/PATCH/DELETE /api/llm-providers/{id}`, `POST /api/llm-providers/{id}/test`, schemas
+  `LLMProvider(+Create/+Update)`, `LLMProviderKind`, `LLMTestResult`; plus optional
+  `llm_provider_id` on `GoalCreate`. Lets users define/edit LLMs in the UI and pick one per goal.
+
+---
+
+# Codex brief — LLM provider management (UI-configurable LLMs)
+
+Let users define LLM providers in the app (Settings) and run goals with a chosen one,
+instead of only env vars.
+
+1. **Storage:** a `llm_providers` entity (SQLite + InMemory): `id, name, kind
+   (openai_compatible|anthropic), base_url, model, timeout_seconds, is_default, created_at`,
+   plus an **encrypted** `api_key`. **Never return the api_key** — responses use `has_api_key`
+   only (see `LLMProvider` schema). Setting `is_default=true` unsets it on others.
+2. **Endpoints:** CRUD per `openapi.yaml` (`/api/llm-providers...`). `PATCH` updates the key
+   only if `api_key` is provided. `POST /{id}/test` does a minimal live call (e.g. tiny
+   completion) and returns `LLMTestResult {ok, detail?, model?}` — never leak the key in
+   `detail`.
+3. **Use at runtime:** when starting a run, build the LLM provider from the goal's
+   `llm_provider_id`; else the `is_default` provider; else fall back to env. Wire this into
+   `build_llm_provider`/the run path so the **real agent engine** uses the selected provider.
+4. **Security:** encrypt keys at rest (reuse the secret/KMS approach), keep them out of logs,
+   traces, and error messages (guardrail FR-SEC-7).
+
+Pairs with the REAL AGENT ENGINE brief above (same engine consumes the selected provider).
+Sync: `git -C ../loopforge-be merge main`. Tests per endpoint; `pytest tests/ -q`.
+
+---
+
+# Codex brief — REAL AGENT ENGINE (make the loop LLM-driven, end-to-end)
+
+This is the big one. Today the engine is **templated**: `LoopPlanner.generate_spec` calls the
+LLM but **discards the result** and returns hardcoded agents; `check_clarity` is a word-count
+heuristic; the runner emits events but agents don't actually do work, so Results are always
+empty. Make it real, driven by the configured **OpenAI-compatible LLM**
+(`LOOPFORGE_LLM_PROVIDER=openai_compatible`, `..._BASE_URL/_MODEL/_API_KEY`).
+
+**Keep the HTTP contract in `openapi.yaml` unchanged** (except the new artifact-content
+endpoint). The frontend already renders whatever specs/agents/artifacts you return.
+
+### 1. LLM-driven planner (`api/loopforge/planner.py`)
+- **Clarity check:** prompt the LLM to judge whether the goal is actionable; if not, have it
+  return focused clarification questions + missing requirements + a clarity score. No more
+  word-count heuristic.
+- **Spec generation:** prompt the LLM to **design the loop** for the goal and return **strict
+  JSON** matching `LoopSpec` (agents with names/roles/**system_prompt**/tools, handoffs,
+  success/failure criteria, gates, context_policy, improvement_strategy). Validate with
+  Pydantic; on parse failure, re-ask once, else fail honestly. The agents, prompts, and
+  handoffs must be **derived from the goal**, not hardcoded.
+- **Guardrails:** tools the LLM assigns must be a subset of what the goal's toggles allow
+  (no internet tool when `toggles.internet` is false / offline_local). Treat the goal text and
+  any tool/data text as **data, not instructions** (prompt-injection containment).
+
+### 2. Real execution (`worker/` + runner)
+- Execute the approved spec: for each agent step, build a bounded **context pack** and call the
+  LLM with that agent's **system_prompt**; let agents use tools — **sandbox.exec** (Docker+gVisor,
+  already hardened) to write & run code, **workspace** to persist files.
+- **Produce real artifacts** and persist them (`artifacts` table): generated **code** (kind
+  `code`), a **report** (kind `report`), and, when applicable, **insights** (kind `insight`)
+  and **models** (kind `model`). Populate `GET /api/runs/{id}/results` from validated artifacts;
+  `GET /api/runs/{id}/context` from the real ledger/pack.
+- Emit the existing event types (`node_start/node_end/tool_call/llm_call/cost_update/
+  gate_pending/run_status`) as you go so the canvas/stream/meters animate. Honor the **budget
+  guard** (hard stop) and **HITL gates** (pause → resume on approval, already wired).
+- **Honest-empty:** if nothing validates, return empty results — never fabricate.
+
+### 3. Artifact content endpoint (new in contract)
+- `GET /api/artifacts/{artifactId}/content` → `ArtifactContent {artifact_id, filename?,
+  language?, content}` (PII-masked). This is what powers "view/extract the code" in the UI.
+
+### Demo target (user's real use case)
+A goal → LLM clarifies → LLM **designs the agents + prompts** → run executes → produces
+**runnable code artifacts AND/or validated insights** the user can view, copy, and download.
+
+Sync + work: `git -C ../loopforge-be merge main` then implement on your branch.
+`pytest tests/ -q`. Suggest committing in stages (planner → runner → artifact content).
+**Loop Spec "Reject" still NOT in scope** (pending arbiter).
+
+---
+
+# Codex brief — Datasets (bring-your-own data files)
+
+Let users upload a CSV/Parquet dataset, profile it, and attach it to a goal so the loop runs
+against real data (not only the read-only DB). The frontend (Datasets page + goal picker) is
+already built and renders whatever you return; keep the contract in `openapi.yaml` unchanged.
+
+1. **Storage:** a `datasets` entity (SQLite + InMemory): `id, name, filename, kind (csv|parquet),
+   size_bytes, status (uploaded|profiling|ready|failed), profile (JSON|null), detail (str|null),
+   created_at`. Store the uploaded file under a server-managed path (NOT in the repo / NOT
+   web-served). `name` defaults to the filename.
+2. **Endpoints** (per contract): `POST /api/datasets` (multipart `file` + optional `name`) →
+   `201 Dataset` (status `uploaded`/`profiling`, profile null until done); `GET /api/datasets`;
+   `GET /api/datasets/{id}` (with profile); `DELETE /api/datasets/{id}` (also deletes the file).
+   Reject non-CSV/Parquet → `415`; enforce a max size cap → `413`.
+3. **Profiling:** read the file (pandas/pyarrow) and produce `DatasetProfile {row_count,
+   column_count, columns[]}`. Each `DatasetColumn`: `name, dtype, null_count, unique_count,
+   sample[], pii_masked`. **PII masking is mandatory** — never let raw values leave the server
+   (guardrail #10): detect likely-PII columns (email/phone/name/id-like / high-cardinality
+   string) and mask sample values (e.g. `10xxxx`), set `pii_masked=true`. Sample ≤ ~5 values.
+4. **Runtime use:** when a goal has `dataset_id`, **mount the file read-only into the sandbox**
+   (`/workspace/data/<filename>`, read-only — `/workspace` itself stays writable per FR-SEC-1)
+   so agent code can `pandas.read_csv(...)` it. Do **not** add a DB driver; this is a flat file.
+   Expose its presence/profile to the planner so the LLM designs the loop around real columns.
+5. **Security:** no host access beyond the managed store; size/row caps; keep raw values out of
+   profiles, traces, logs, and LLM context (masked only).
+
+Pairs with the REAL AGENT ENGINE brief (the engine analyzes the mounted dataset).
+Sync: `git -C ../loopforge-be merge main`. Tests per endpoint; `pytest tests/ -q`
+(including a security test: uploaded data is mounted **read-only** and raw PII never leaks).
