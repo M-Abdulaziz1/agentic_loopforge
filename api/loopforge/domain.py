@@ -132,6 +132,31 @@ class LoopSpecUpdate(BaseModel):
     improvement_strategy: str | None = None
 
 
+class LoopTemplateCreate(BaseModel):
+    name: str
+    description: str | None = None
+    spec_id: str
+
+
+class LoopTemplateInstantiate(BaseModel):
+    goal_id: str
+
+
+class LoopTemplate(BaseModel):
+    id: str = Field(default_factory=lambda: new_id("template"))
+    name: str
+    description: str | None = None
+    agents: list[LoopSpecAgent]
+    tool_permissions: list[ToolPermission] = Field(default_factory=list)
+    handoffs: list[dict[str, str]]
+    success_criteria: list[str]
+    failure_criteria: list[str]
+    gates: list[str]
+    context_policy: dict[str, Any]
+    improvement_strategy: str
+    created_at: datetime = Field(default_factory=now_utc)
+
+
 class GoalCreateResult(BaseModel):
     goal: Goal
     clarification: ClarificationSession | None = None
