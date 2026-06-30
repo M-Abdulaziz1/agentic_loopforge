@@ -5,7 +5,7 @@ from typing import Any
 
 from api.loopforge.context import ContextManager
 from api.loopforge.domain import Artifact, ContextEntry, Evaluator, Gate, Goal, LoopSpec, Run, RunEvent, RunStatus, now_utc
-from api.loopforge.evaluators import EvaluationCandidate, build_evaluator_provider, candidate_from_agent_output
+from api.loopforge.evaluators import EvaluationCandidate, MlBaselineEvaluator, build_evaluator_provider
 from api.loopforge.providers import DatasetMount, LLMProvider, SandboxProvider
 from api.loopforge.store import Store
 from api.loopforge.tools import ToolRegistry
@@ -57,54 +57,80 @@ class LoopRunner:
             self._event(paused, "run_status", "Run pending approval", {"status": paused.status})
             return paused
 
-        return self._complete_execution(run, goal, spec)
+        return self._complete_execution(run, goal, spec, first_agent_started=True)
 
     def resume_after_gate(self, run: Run, goal: Goal, spec: LoopSpec) -> Run:
         running = run.model_copy(update={"status": RunStatus.RUNNING})
         self.store.save_run(running)
         if not self._consume_step(running, goal):
             return self._budget_exhausted(running)
-        return self._complete_execution(running, goal, spec)
+        return self._complete_execution(running, goal, spec, first_agent_started=True)
 
-    def _complete_execution(self, run: Run, goal: Goal, spec: LoopSpec) -> Run:
-        agent = spec.agents[0]
-        response = self.llm.complete(
-            system=f"{agent.system_prompt}\n\n{EXECUTION_PROTOCOL}",
-            prompt=_execution_prompt(goal, spec, self.store.list_context(run.id)),
-        )
-        run = run.model_copy(update={"spent_llm_calls": run.spent_llm_calls + 1})
-        self.store.save_run(run)
-        self._event(run, "llm_call", "Executor called LLM", {"agent": agent.name, "tokens": response.tokens_used})
+    def _complete_execution(self, run: Run, goal: Goal, spec: LoopSpec, *, first_agent_started: bool) -> Run:
+        agents = spec.agents[:1] if bool(getattr(self.llm, "offline_stub", False)) else spec.agents
+        for index, agent in enumerate(agents):
+            if index > 0 or not first_agent_started:
+                if not self._consume_step(run, goal):
+                    return self._budget_exhausted(run)
+                self._event(run, "node_start", "Executor started", {"agent": agent.name})
 
-        output = _json_or_none(response.text)
-        if output is not None:
+            output = self._call_agent_for_output(run, goal, spec, agent)
+            if output is None:
+                return self._fail_run(run, "LLM did not return actionable execution JSON.")
+
             self._persist_passing_output(run, output)
+            self._append_agent_context(run, agent.name, output)
 
-        if not self._consume_step(run, goal):
-            return self._budget_exhausted(run)
-        self._event(run, "cost_update", "Budget updated", {"spent_steps": run.spent_steps, "spent_llm_calls": run.spent_llm_calls})
-        self._event(run, "node_end", "Executor completed", {"agent": agent.name})
+            if not self._consume_step(run, goal):
+                return self._budget_exhausted(run)
+            self._event(run, "cost_update", "Budget updated", {"spent_steps": run.spent_steps, "spent_llm_calls": run.spent_llm_calls})
+            self._event(run, "node_end", "Executor completed", {"agent": agent.name})
 
         completed = run.model_copy(update={"status": RunStatus.COMPLETED, "result_summary": "Loop completed.", "ended_at": now_utc()})
         self.store.save_run(completed)
         self._event(completed, "run_status", "Run completed", {"status": completed.status})
         return completed
 
+    def _call_agent_for_output(self, run: Run, goal: Goal, spec: LoopSpec, agent) -> dict[str, Any] | None:
+        prompt = _execution_prompt(goal, spec, self.store.list_context(run.id))
+        offline_stub = bool(getattr(self.llm, "offline_stub", False))
+        for attempt in range(2):
+            response = self.llm.complete(system=f"{agent.system_prompt}\n\n{EXECUTION_PROTOCOL}", prompt=prompt)
+            updated = run.model_copy(update={"spent_llm_calls": run.spent_llm_calls + 1})
+            self.store.save_run(updated)
+            run.spent_llm_calls = updated.spent_llm_calls
+            self._event(run, "llm_call", "Executor called LLM", {"agent": agent.name, "tokens": response.tokens_used, "attempt": attempt + 1})
+
+            output = _json_or_none(response.text)
+            if output is not None and _is_actionable_output(output):
+                return output
+            if offline_stub:
+                return output or {}
+            if output is not None:
+                return None
+            prompt = (
+                f"{prompt}\n\nYour previous response was not usable. Return ONLY strict JSON "
+                "with at least one actionable field: code, report, insights, models, or score."
+            )
+        return None
+
     def _persist_passing_output(self, run: Run, output: dict[str, Any]) -> None:
         evaluator_provider = build_evaluator_provider(self.evaluator, llm=self.llm, sandbox=self.sandbox)
-        candidates: list[tuple[str, dict[str, Any]]] = []
+        candidates: list[tuple[str, dict[str, Any], object]] = []
         for insight in output.get("insights", []) or []:
             if isinstance(insight, dict):
-                candidates.append(("insight", insight))
+                candidates.append(("insight", insight, evaluator_provider))
         for model in output.get("models", []) or []:
             if isinstance(model, dict):
-                candidates.append(("model", model))
-        if not candidates and any(key in output for key in ("code", "report", "score")):
-            candidates.append(("report", dict(output)))
+                provider = evaluator_provider if self.evaluator is not None else MlBaselineEvaluator()
+                candidates.append(("model", model, provider))
+        if self.evaluator is not None and "score" in output:
+            candidates.append(("report", dict(output), evaluator_provider))
 
         passing = False
-        for kind, metadata in candidates:
-            result = evaluator_provider.evaluate(EvaluationCandidate(metadata=metadata, text=str(output.get("report") or "")))
+        for kind, metadata, provider in candidates:
+            candidate = EvaluationCandidate(metadata=metadata, text=str(output.get("report") or ""))
+            result = provider.evaluate(candidate)
             if result.passed:
                 passing = True
                 if kind == "insight":
@@ -112,9 +138,11 @@ class LoopRunner:
                 elif kind == "model":
                     self.store.save_artifact(Artifact(run_id=run.id, kind="model", metadata={**metadata, "beats_baseline": True, "leakage_ok": metadata.get("leakage_ok", True)}))
 
-        if not passing and self.evaluator is not None:
+        if self.evaluator is not None and candidates and not passing:
             return
-        if not passing and candidates:
+        if self.evaluator is None and "score" in output and not (output.get("code") or output.get("models") or output.get("insights")):
+            return
+        if self.evaluator is None and candidates and not passing and not (output.get("code") or output.get("report")):
             return
 
         if isinstance(output.get("code"), str):
@@ -124,6 +152,19 @@ class LoopRunner:
             self.store.save_artifact(Artifact(run_id=run.id, kind="code", metadata={"filename": "analysis.py", "language": "python", "content": code, "stdout": sandbox_result.stdout, "stderr": sandbox_result.stderr}))
         if isinstance(output.get("report"), str):
             self.store.save_artifact(Artifact(run_id=run.id, kind="report", metadata={"filename": "report.md", "content": str(output["report"]), "summary": str(output["report"])[:240]}))
+
+    def _append_agent_context(self, run: Run, agent_name: str, output: dict[str, Any]) -> None:
+        summary: list[str] = []
+        if isinstance(output.get("report"), str):
+            summary.append(str(output["report"])[:1000])
+        if output.get("models"):
+            summary.append(f"models={json.dumps(output['models'])[:1000]}")
+        if output.get("insights"):
+            summary.append(f"insights={json.dumps(output['insights'])[:1000]}")
+        if isinstance(output.get("code"), str):
+            summary.append("Generated executable code artifact.")
+        if summary:
+            self.store.append_context(ContextEntry(run_id=run.id, kind="agent_output", text=f"{agent_name}: " + "\n".join(summary), tags=["agent_output"]))
 
     def _consume_step(self, run: Run, goal: Goal) -> bool:
         if run.spent_steps >= goal.budget.max_steps:
@@ -138,6 +179,12 @@ class LoopRunner:
         self.store.save_run(exhausted)
         self._event(exhausted, "run_status", "Step budget exhausted", {"status": exhausted.status})
         return exhausted
+
+    def _fail_run(self, run: Run, summary: str) -> Run:
+        failed = run.model_copy(update={"status": RunStatus.FAILED, "result_summary": summary, "ended_at": now_utc()})
+        self.store.save_run(failed)
+        self._event(failed, "run_status", summary, {"status": failed.status})
+        return failed
 
     def _event(self, run: Run, event_type: str, message: str, payload: dict[str, object] | None = None) -> None:
         self.store.append_event(RunEvent(run_id=run.id, seq=0, type=event_type, message=message, payload=payload or {}))
@@ -187,3 +234,15 @@ def _json_or_none(text: str) -> dict[str, Any] | None:
         return data if isinstance(data, dict) else None
     except ValueError:
         return None
+
+
+def _is_actionable_output(output: dict[str, Any]) -> bool:
+    return any(
+        [
+            isinstance(output.get("code"), str) and bool(output["code"].strip()),
+            isinstance(output.get("report"), str) and bool(output["report"].strip()),
+            isinstance(output.get("insights"), list) and bool(output["insights"]),
+            isinstance(output.get("models"), list) and bool(output["models"]),
+            "score" in output,
+        ]
+    )
