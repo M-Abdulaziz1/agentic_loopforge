@@ -322,6 +322,25 @@ Sync + work: `git -C ../loopforge-be merge main` then implement on your branch.
 
 ---
 
+# Codex brief — upgrade the LLM steering prompts (Claude-style)
+
+The engine works, but the **planner passes a slug as the system message** (e.g.
+`complete(system="loop-planner-spec", ...)`) so the model gets no real system prompt and all
+steering leaks into the user turn next to untrusted data (weakens guardrail #11). Replace the
+planner/runner prompts with the canonical ones in **`docs/contract/llm-prompts.md`**:
+
+1. Add module constants `CLARITY_SYSTEM`, `SPEC_SYSTEM`, `EXECUTION_PROTOCOL` and helpers
+   `_clarity_user`, `_spec_user`, `_execution_user` exactly as specified there.
+2. Planner: `complete(system=CLARITY_SYSTEM, prompt=_clarity_user(goal))` and
+   `complete(system=SPEC_SYSTEM, prompt=_spec_user(goal, dataset))` (retry reuses `SPEC_SYSTEM`).
+3. Runner: send `system = agent.system_prompt + "\n\n" + EXECUTION_PROTOCOL`, user = `_execution_user(...)`.
+4. Improve the three `_fallback_spec` agent `system_prompt` strings per the doc.
+5. Keep `openapi.yaml` unchanged. Update any test asserting the old slug. `pytest tests/ -q`
+   and `pytest tests/security -q` must stay green (the data-as-data framing should help the
+   injection-containment tests, not hurt them).
+
+---
+
 # Codex brief — Evaluator as a provider interface (the loop's frozen objective)
 
 Generalize "what does winning mean" into a pluggable **Evaluator** — Karpathy's immutable
