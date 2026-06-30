@@ -5,6 +5,12 @@ import { Placeholder } from "../pages/Placeholder";
 
 // Heavy/route-level pages are code-split so the initial bundle stays small.
 // (The React Flow pages — Run view, Loop Builder — only load when visited.)
+const GoalsListPage = lazy(() =>
+  import("../pages/GoalsListPage").then((m) => ({ default: m.GoalsListPage })),
+);
+const SpecsListPage = lazy(() =>
+  import("../pages/SpecsListPage").then((m) => ({ default: m.SpecsListPage })),
+);
 const GoalCreatePage = lazy(() =>
   import("../pages/GoalCreatePage").then((m) => ({ default: m.GoalCreatePage })),
 );
@@ -39,10 +45,10 @@ export function AppRoutes() {
     <Routes>
       <Route element={<AppLayout />}>
         <Route index element={<Navigate to="/goals" replace />} />
-        <Route path="/goals" element={<Placeholder title="Goals" />} />
+        <Route path="/goals" element={<GoalsListPage />} />
         <Route path="/goals/new" element={<GoalCreatePage />} />
         <Route path="/goals/:goalId/clarify" element={<ClarificationPage />} />
-        <Route path="/specs" element={<Placeholder title="Loop Specs" />} />
+        <Route path="/specs" element={<SpecsListPage />} />
         <Route path="/specs/:specId" element={<LoopSpecPage />} />
         <Route path="/specs/:specId/edit" element={<LoopBuilderPage />} />
         <Route path="/templates" element={<TemplatesPage />} />
