@@ -7,7 +7,7 @@ from typing import TypeVar
 
 from pydantic import BaseModel
 
-from api.loopforge.domain import Artifact, AuditEvent, ClarificationSession, ContextEntry, Gate, GateStatus, Goal, LoopSpec, LoopTemplate, Run, RunEvent, StoredDataset, StoredLLMProvider
+from api.loopforge.domain import Artifact, AuditEvent, ClarificationSession, ContextEntry, Evaluator, Gate, GateStatus, Goal, LoopSpec, LoopTemplate, Run, RunEvent, StoredDataset, StoredLLMProvider
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
 
@@ -126,6 +126,30 @@ class SQLiteStore:
         if cursor.rowcount == 0:
             raise KeyError(dataset_id)
         return dataset
+
+    def save_evaluator(self, evaluator: Evaluator) -> Evaluator:
+        if evaluator.is_default:
+            for existing in self.list_evaluators():
+                if existing.id != evaluator.id and existing.is_default:
+                    self._save("evaluator", existing.model_copy(update={"is_default": False}))
+        self._save("evaluator", evaluator)
+        return evaluator
+
+    def get_evaluator(self, evaluator_id: str) -> Evaluator:
+        return self._get("evaluator", evaluator_id, Evaluator)
+
+    def list_evaluators(self) -> list[Evaluator]:
+        return sorted(self._list("evaluator", Evaluator), key=lambda evaluator: evaluator.created_at, reverse=True)
+
+    def get_default_evaluator(self) -> Evaluator | None:
+        return next((evaluator for evaluator in self.list_evaluators() if evaluator.is_default), None)
+
+    def delete_evaluator(self, evaluator_id: str) -> None:
+        with self._lock:
+            cursor = self._connection.execute("DELETE FROM records WHERE kind = ? AND id = ?", ("evaluator", evaluator_id))
+            self._connection.commit()
+        if cursor.rowcount == 0:
+            raise KeyError(evaluator_id)
 
     def save_run(self, run: Run) -> Run:
         self._save("run", run, goal_id=run.goal_id)

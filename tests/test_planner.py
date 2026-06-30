@@ -30,7 +30,7 @@ def test_planner_generates_loop_spec_for_clear_offline_goal() -> None:
     assert spec.goal_id == goal.id
     assert spec.agents[0].name == "Loop Planner"
     assert "web_search" not in [permission.tool_name for permission in spec.tool_permissions if permission.enabled]
-    assert "before_run" in spec.gates
+    assert spec.gates == ["before_training", "before_finalize"]
 
 
 def test_planner_includes_web_tool_when_internet_toggle_is_enabled() -> None:

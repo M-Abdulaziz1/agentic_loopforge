@@ -23,6 +23,10 @@ from api.loopforge.domain import (
     Dataset,
     DatasetKind,
     DatasetStatus,
+    Evaluator,
+    EvaluatorCreate,
+    EvaluatorUpdate,
+    ArtifactContent,
     Gate,
     GateDecision,
     GateStatus,
@@ -101,6 +105,11 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
                 store.get_dataset(payload.dataset_id)
             except KeyError as exc:
                 raise HTTPException(status_code=404, detail="Dataset not found") from exc
+        if payload.evaluator_id is not None:
+            try:
+                store.get_evaluator(payload.evaluator_id)
+            except KeyError as exc:
+                raise HTTPException(status_code=404, detail="Evaluator not found") from exc
         goal = store.save_goal(Goal(**payload.model_dump()))
         clarity = planner.check_clarity(goal)
         goal = goal.model_copy(update={"status": clarity.status})
@@ -374,6 +383,44 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
         _audit(store, "dataset.delete", "dataset", datasetId, {})
         return None
 
+    @app.get("/api/evaluators")
+    def list_evaluators() -> list[Evaluator]:
+        return store.list_evaluators()
+
+    @app.post("/api/evaluators", status_code=201)
+    def create_evaluator(payload: EvaluatorCreate) -> Evaluator:
+        evaluator = store.save_evaluator(Evaluator(**payload.model_dump()))
+        _audit(store, "evaluator.create", "evaluator", evaluator.id, {"kind": evaluator.kind, "is_default": evaluator.is_default})
+        return evaluator
+
+    @app.get("/api/evaluators/{evaluatorId}")
+    def get_evaluator(evaluatorId: str) -> Evaluator:
+        try:
+            return store.get_evaluator(evaluatorId)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Evaluator not found") from exc
+
+    @app.patch("/api/evaluators/{evaluatorId}")
+    def update_evaluator(evaluatorId: str, payload: EvaluatorUpdate) -> Evaluator:
+        if _is_evaluator_frozen(store, evaluatorId):
+            raise HTTPException(status_code=409, detail="Evaluator is frozen by an existing run")
+        try:
+            evaluator = store.get_evaluator(evaluatorId)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Evaluator not found") from exc
+        updated = store.save_evaluator(evaluator.model_copy(update=payload.model_dump(exclude_unset=True)))
+        _audit(store, "evaluator.update", "evaluator", updated.id, {"is_default": updated.is_default})
+        return updated
+
+    @app.delete("/api/evaluators/{evaluatorId}", status_code=204)
+    def delete_evaluator(evaluatorId: str) -> None:
+        try:
+            store.delete_evaluator(evaluatorId)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Evaluator not found") from exc
+        _audit(store, "evaluator.delete", "evaluator", evaluatorId, {})
+        return None
+
     @app.post("/api/goals/{goalId}/runs", status_code=201)
     def start_run(goalId: str, payload: RunStartRequest) -> Run:
         try:
@@ -385,15 +432,19 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
             raise HTTPException(status_code=404, detail="Goal or loop spec not found")
         if spec.status != "approved":
             raise HTTPException(status_code=409, detail="Loop spec must be approved before running")
+        evaluator = _evaluator_for_goal(store, goal)
         runner = LoopRunner(
             store=store,
             llm=_llm_for_goal(store, settings, goal),
             sandbox=sandbox,
             tools=tools,
             dataset_mount=_dataset_mount_for_goal(store, goal),
+            evaluator=evaluator,
         )
         run = runner.start(goal, spec)
         _audit(store, "run.start", "run", run.id, {"goal_id": goal.id, "loop_spec_id": spec.id, "status": run.status})
+        if evaluator is not None:
+            _audit(store, "evaluator.freeze", "evaluator", evaluator.id, {"run_id": run.id, "snapshot": evaluator.model_dump(mode="json")})
         return run
 
     @app.get("/api/runs")
@@ -488,6 +539,20 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
             pack=_sanitize_context_pack(pack),
         )
 
+    @app.get("/api/artifacts/{artifactId}/content")
+    def get_artifact_content(artifactId: str) -> ArtifactContent:
+        for run in store.list_runs():
+            for artifact in store.list_artifacts(run.id):
+                if artifact.id == artifactId:
+                    metadata = _sanitize_value(artifact.metadata)
+                    return ArtifactContent(
+                        artifact_id=artifact.id,
+                        filename=metadata.get("filename") if isinstance(metadata.get("filename"), str) else None,
+                        language=metadata.get("language") if isinstance(metadata.get("language"), str) else None,
+                        content=str(metadata.get("content") or ""),
+                    )
+        raise HTTPException(status_code=404, detail="Artifact not found")
+
     @app.get("/api/gates")
     def list_gates(status: GateStatus | None = None, run_id: str | None = None) -> list[Gate]:
         return store.list_gates(status=status, run_id=run_id)
@@ -531,11 +596,22 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
                 sandbox=sandbox,
                 tools=tools,
                 dataset_mount=_dataset_mount_for_goal(store, goal),
+                evaluator=_evaluator_for_goal(store, goal),
             )
             runner.resume_after_gate(run, goal, spec)
         return decided
 
     return app
+
+
+def _evaluator_for_goal(store: Store, goal: Goal) -> Evaluator | None:
+    if goal.evaluator_id is not None:
+        return store.get_evaluator(goal.evaluator_id)
+    return store.get_default_evaluator()
+
+
+def _is_evaluator_frozen(store: Store, evaluator_id: str) -> bool:
+    return any(event.action == "evaluator.freeze" and event.subject_id == evaluator_id for event in store.list_audit_events())
 
 
 def _dataset_mount_for_goal(store: Store, goal: Goal) -> DatasetMount | None:

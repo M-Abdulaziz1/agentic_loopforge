@@ -171,4 +171,11 @@ def test_run_uses_goal_provider_then_default_provider(monkeypatch) -> None:
     assert created_for == ["Selected", "Default"]
     assert len(selected_llm.calls) == 1
     assert len(default_llm.calls) == 1
-    assert [call[0] for call in env_llm.calls] == ["loop-planner", "loop-planner"]
+    assert [call[0] for call in env_llm.calls] == [
+        "loop-planner-clarity",
+        "loop-planner-spec",
+        "loop-planner-spec",
+        "loop-planner-clarity",
+        "loop-planner-spec",
+        "loop-planner-spec",
+    ]

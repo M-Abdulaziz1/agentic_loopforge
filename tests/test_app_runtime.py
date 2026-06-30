@@ -31,4 +31,5 @@ def test_create_app_uses_runtime_factories_from_settings(monkeypatch) -> None:
 
     assert response.status_code == 201
     assert seen["settings"] == settings
-    assert llm.calls == [("loop-planner", "Create a local backend release checklist")]
+    assert [call[0] for call in llm.calls] == ["loop-planner-clarity", "loop-planner-spec", "loop-planner-spec"]
+    assert "Create a local backend release checklist" in llm.calls[0][1]
