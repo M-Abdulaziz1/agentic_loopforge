@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from api.loopforge import app as app_module
 from api.loopforge.app import create_app
+from api.loopforge.planner import CLARITY_SYSTEM, SPEC_SYSTEM
 from api.loopforge.providers import LLMResponse
 from api.loopforge.secrets import SecretCipher
 from api.loopforge.sqlite_store import SQLiteStore
@@ -172,10 +173,10 @@ def test_run_uses_goal_provider_then_default_provider(monkeypatch) -> None:
     assert len(selected_llm.calls) == 1
     assert len(default_llm.calls) == 1
     assert [call[0] for call in env_llm.calls] == [
-        "loop-planner-clarity",
-        "loop-planner-spec",
-        "loop-planner-spec",
-        "loop-planner-clarity",
-        "loop-planner-spec",
-        "loop-planner-spec",
+        CLARITY_SYSTEM,
+        SPEC_SYSTEM,
+        SPEC_SYSTEM,
+        CLARITY_SYSTEM,
+        SPEC_SYSTEM,
+        SPEC_SYSTEM,
     ]

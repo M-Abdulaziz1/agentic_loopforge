@@ -86,8 +86,8 @@ def test_planner_uses_llm_json_for_clarity_and_spec_with_autonomy_gates() -> Non
     assert spec.agents[0].system_prompt != "You execute only approved steps with approved tools and report blockers honestly."
     assert spec.gates == ["before_finalize"]
     assert len(llm.calls) == 3
-    assert "strict JSON" in llm.calls[1][1]
-    assert "The previous response was not valid" in llm.calls[2][1]
+    assert "strict JSON" in llm.calls[1][0]
+    assert "Your previous reply was not valid" in llm.calls[2][1]
 
 
 def test_runner_executes_llm_agent_json_in_sandbox_and_persists_artifacts() -> None:
