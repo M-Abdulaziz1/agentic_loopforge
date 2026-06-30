@@ -86,6 +86,7 @@ class ClarificationQuestion(BaseModel):
     id: str = Field(default_factory=lambda: new_id("question"))
     question: str
     missing_requirement: str
+    options: list[str] = Field(default_factory=list)
 
 
 class ClarificationSession(BaseModel):

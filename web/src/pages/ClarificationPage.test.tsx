@@ -35,3 +35,9 @@ test("answering a ready question navigates to the generated loop spec", async ()
   await userEvent.click(screen.getByRole("button", { name: /Send/ }));
   expect(await screen.findByTestId("loc")).toHaveTextContent("/specs/spec_churn_v1");
 });
+
+test("selecting a suggested option submits it and navigates to the spec", async () => {
+  renderAt("/goals/goal_churn_q2/clarify");
+  await userEvent.click(await screen.findByRole("button", { name: "At least 3 drivers" }));
+  expect(await screen.findByTestId("loc")).toHaveTextContent("/specs/spec_churn_v1");
+});

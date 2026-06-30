@@ -16,9 +16,9 @@ export function ClarificationPage() {
   );
   const current = session?.questions.find((q) => !answeredIds.has(q.id));
 
-  async function send() {
-    if (!current || answer.trim().length === 0) return;
-    const res = await submit.mutateAsync({ question_id: current.id, answer });
+  async function sendAnswer(value: string) {
+    if (!current || value.trim().length === 0) return;
+    const res = await submit.mutateAsync({ question_id: current.id, answer: value });
     setAnswer("");
     if (res.loop_spec) navigate(`/specs/${res.loop_spec.id}`);
   }
@@ -62,22 +62,48 @@ export function ClarificationPage() {
             ))}
           </div>
           {current ? (
-            <div className="flex items-end gap-3 border-t border-[var(--line)] px-7 py-4">
-              <textarea
-                aria-label="Answer"
-                value={answer}
-                onChange={(e) => setAnswer(e.target.value)}
-                placeholder="Answer the question…"
-                className="max-h-[120px] min-h-[48px] flex-1 resize-none rounded-xl border border-[var(--line2)] bg-white/[0.03] px-4 py-3 text-sm text-ink outline-none focus:border-[#cdbcff]"
-              />
-              <button
-                type="button"
-                onClick={send}
-                disabled={submit.isPending || answer.trim().length === 0}
-                className="rounded-xl bg-gradient-to-br from-violet to-teal px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
-              >
-                Send ↵
-              </button>
+            <div className="border-t border-[var(--line)] px-7 py-4">
+              {current.options.length > 0 ? (
+                <div className="mb-3">
+                  <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-mut">
+                    Pick an answer
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {current.options.map((opt) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        disabled={submit.isPending}
+                        onClick={() => sendAnswer(opt)}
+                        className="rounded-full border border-[rgba(184,166,255,.35)] bg-[var(--glass)] px-3.5 py-1.5 text-[13px] text-ink transition hover:border-[#cdbcff] hover:bg-[rgba(138,108,255,.16)] disabled:opacity-50"
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              <div className="flex items-end gap-3">
+                <textarea
+                  aria-label="Answer"
+                  value={answer}
+                  onChange={(e) => setAnswer(e.target.value)}
+                  placeholder={
+                    current.options.length > 0
+                      ? "Or type your own answer…"
+                      : "Answer the question…"
+                  }
+                  className="max-h-[120px] min-h-[48px] flex-1 resize-none rounded-xl border border-[var(--line2)] bg-white/[0.03] px-4 py-3 text-sm text-ink outline-none focus:border-[#cdbcff]"
+                />
+                <button
+                  type="button"
+                  onClick={() => sendAnswer(answer)}
+                  disabled={submit.isPending || answer.trim().length === 0}
+                  className="rounded-xl bg-gradient-to-br from-violet to-teal px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
+                >
+                  Send ↵
+                </button>
+              </div>
             </div>
           ) : null}
         </div>

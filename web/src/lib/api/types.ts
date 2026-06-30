@@ -141,6 +141,7 @@ export type ClarificationQuestion = {
   id: string;
   question: string;
   missing_requirement: string;
+  options: string[];
 };
 
 export type ClarificationSession = {

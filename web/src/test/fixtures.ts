@@ -35,6 +35,7 @@ export const sampleClarification: ClarificationSession = {
       id: "q_success",
       question: 'How many validated drivers is "enough" to call this a success?',
       missing_requirement: "Success criterion",
+      options: ["At least 3 drivers", "At least 5 drivers", "The single strongest driver"],
     },
   ],
   answers: [

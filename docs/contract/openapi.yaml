@@ -723,11 +723,15 @@ components:
 
     ClarificationQuestion:
       type: object
-      required: [id, question, missing_requirement]
+      required: [id, question, missing_requirement, options]
       properties:
         id: { type: string }
         question: { type: string }
         missing_requirement: { type: string }
+        options:
+          type: array
+          items: { type: string }
+          description: Suggested selectable answers (2-4); the user may also enter their own.
 
     ClarificationSession:
       type: object
