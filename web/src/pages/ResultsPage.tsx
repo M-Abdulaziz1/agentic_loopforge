@@ -1,11 +1,15 @@
+import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { GlassCard } from "../components/ui/GlassCard";
-import { useResults } from "../lib/api/results";
-import type { InsightResult, ModelResult } from "../lib/api/types";
+import { ArtifactViewer } from "../components/run/ArtifactViewer";
+import { useArtifacts, useResults } from "../lib/api/results";
+import type { Artifact, InsightResult, ModelResult } from "../lib/api/types";
 
 export function ResultsPage() {
   const { runId = "" } = useParams();
   const { data: results, isLoading } = useResults(runId);
+  const { data: artifacts = [] } = useArtifacts(runId);
+  const [viewerId, setViewerId] = useState<string | null>(null);
 
   if (isLoading || !results) return <div className="p-8 text-mut">Loading results…</div>;
 
@@ -61,8 +65,22 @@ export function ResultsPage() {
               ))}
             </>
           )}
+
+          {artifacts.length ? (
+            <>
+              <SectionTitle>Artifacts</SectionTitle>
+              <GlassCard>
+                {artifacts.map((a) => (
+                  <ArtifactRow key={a.id} artifact={a} onView={() => setViewerId(a.id)} />
+                ))}
+              </GlassCard>
+            </>
+          ) : null}
         </div>
       </div>
+      {viewerId ? (
+        <ArtifactViewer artifactId={viewerId} onClose={() => setViewerId(null)} />
+      ) : null}
     </div>
   );
 }
@@ -119,6 +137,26 @@ function ModelCard({ model }: { model: ModelResult }) {
         <Stat label="leakage" value={model.leakage_ok ? "clean" : "FAILED"} />
       </div>
     </GlassCard>
+  );
+}
+
+function ArtifactRow({ artifact, onView }: { artifact: Artifact; onView: () => void }) {
+  const filename =
+    typeof artifact.metadata.filename === "string" ? artifact.metadata.filename : artifact.id;
+  return (
+    <div className="flex items-center gap-3 border-b border-[var(--line)] py-3 last:border-0">
+      <span className="rounded-md bg-[var(--glass2)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[.4px] text-ink2">
+        {artifact.kind}
+      </span>
+      <span className="font-mono text-[13px]">{filename}</span>
+      <button
+        type="button"
+        onClick={onView}
+        className="ml-auto rounded-lg border border-[rgba(74,214,255,.25)] bg-[rgba(74,214,255,.1)] px-3 py-1.5 text-[12px] font-semibold text-teal"
+      >
+        View / extract
+      </button>
+    </div>
   );
 }
 

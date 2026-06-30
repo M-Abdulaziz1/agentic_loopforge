@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "./client";
-import type { Artifact, Results, RunContext } from "./types";
+import type { Artifact, ArtifactContent, Results, RunContext } from "./types";
 
 export function useResults(runId: string) {
   return useQuery({
@@ -23,5 +23,13 @@ export function useArtifacts(runId: string) {
     queryKey: ["runs", runId, "artifacts"],
     queryFn: () => apiFetch<Artifact[]>(`/api/runs/${runId}/artifacts`),
     enabled: Boolean(runId),
+  });
+}
+
+export function useArtifactContent(artifactId: string) {
+  return useQuery({
+    queryKey: ["artifact", artifactId, "content"],
+    queryFn: () => apiFetch<ArtifactContent>(`/api/artifacts/${artifactId}/content`),
+    enabled: Boolean(artifactId),
   });
 }

@@ -5,6 +5,8 @@ import {
   sampleGate,
   sampleGoal,
   sampleLoopSpec,
+  sampleArtifact,
+  sampleArtifactContent,
   sampleResults,
   sampleRun,
   sampleRunContext,
@@ -56,7 +58,10 @@ export const handlers = [
   ),
   http.get("/api/runs/:runId/results", () => HttpResponse.json(sampleResults)),
   http.get("/api/runs/:runId/context", () => HttpResponse.json(sampleRunContext)),
-  http.get("/api/runs/:runId/artifacts", () => HttpResponse.json([])),
+  http.get("/api/runs/:runId/artifacts", () => HttpResponse.json([sampleArtifact])),
+  http.get("/api/artifacts/:artifactId/content", () =>
+    HttpResponse.json(sampleArtifactContent),
+  ),
   http.get("/api/templates", () => HttpResponse.json([sampleTemplate])),
   http.post("/api/templates", () => HttpResponse.json(sampleTemplate, { status: 201 })),
   http.post("/api/templates/:templateId/instantiate", () =>

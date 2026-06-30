@@ -1,5 +1,7 @@
 // Contract-conformant sample data (docs/contract/openapi.yaml) for MSW + dev.
 import type {
+  Artifact,
+  ArtifactContent,
   ClarificationSession,
   Gate,
   Goal,
@@ -202,4 +204,21 @@ export const sampleTemplate: LoopTemplate = {
   context_policy: sampleLoopSpec.context_policy,
   improvement_strategy: sampleLoopSpec.improvement_strategy,
   created_at: "2026-06-29T09:00:00Z",
+};
+
+export const sampleArtifact: Artifact = {
+  id: "art_code_1",
+  run_id: "run_a91c",
+  kind: "code",
+  metadata: { filename: "churn_analysis.py", language: "python" },
+  storage_ref: null,
+  created_at: "2026-06-30T09:00:00Z",
+};
+
+export const sampleArtifactContent: ArtifactContent = {
+  artifact_id: "art_code_1",
+  filename: "churn_analysis.py",
+  language: "python",
+  content:
+    "import pandas as pd\nfrom scipy import stats\n\ndf = load('customers_q2')\n# chi-square: support tickets vs churn\nprint(stats.chi2_contingency(pd.crosstab(df.tickets_gt3, df.churned)))\n",
 };

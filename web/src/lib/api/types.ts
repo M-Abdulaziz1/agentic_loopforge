@@ -205,6 +205,13 @@ export type ContextPack = {
 
 export type RunContext = { ledger: ContextEntry[]; pack: ContextPack };
 
+export type ArtifactContent = {
+  artifact_id: string;
+  filename: string | null;
+  language: string | null;
+  content: string;
+};
+
 export type LoopTemplate = {
   id: string;
   name: string;
