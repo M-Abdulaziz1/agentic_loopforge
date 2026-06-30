@@ -18,9 +18,13 @@ export function ClarificationPage() {
 
   async function sendAnswer(value: string) {
     if (!current || value.trim().length === 0) return;
-    const res = await submit.mutateAsync({ question_id: current.id, answer: value });
-    setAnswer("");
-    if (res.loop_spec) navigate(`/specs/${res.loop_spec.id}`);
+    try {
+      const res = await submit.mutateAsync({ question_id: current.id, answer: value });
+      setAnswer("");
+      if (res.loop_spec) navigate(`/specs/${res.loop_spec.id}`);
+    } catch {
+      // Surfaced below via submit.isError — no fake fallback.
+    }
   }
 
   if (isLoading || !session) {
@@ -33,6 +37,8 @@ export function ClarificationPage() {
     .filter((q) => answeredIds.has(q.id))
     .map((q) => q.missing_requirement);
   const pct = Math.round(session.clarity_score * 100);
+  // Tolerate older sessions / backends that don't include options.
+  const currentOptions = current?.options ?? [];
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -63,13 +69,19 @@ export function ClarificationPage() {
           </div>
           {current ? (
             <div className="border-t border-[var(--line)] px-7 py-4">
-              {current.options.length > 0 ? (
+              {submit.isError ? (
+                <div className="mb-3 rounded-lg bg-[rgba(255,107,154,.14)] px-3 py-1.5 text-[12.5px] text-[#ffd0e0]">
+                  Couldn't generate the loop spec — the LLM provider failed. Check it in
+                  Settings and try again.
+                </div>
+              ) : null}
+              {currentOptions.length > 0 ? (
                 <div className="mb-3">
                   <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-mut">
                     Pick an answer
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {current.options.map((opt) => (
+                    {currentOptions.map((opt) => (
                       <button
                         key={opt}
                         type="button"
@@ -89,7 +101,7 @@ export function ClarificationPage() {
                   value={answer}
                   onChange={(e) => setAnswer(e.target.value)}
                   placeholder={
-                    current.options.length > 0
+                    currentOptions.length > 0
                       ? "Or type your own answer…"
                       : "Answer the question…"
                   }
