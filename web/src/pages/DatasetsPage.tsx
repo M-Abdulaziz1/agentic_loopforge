@@ -5,6 +5,7 @@ import {
   useDatasets,
   useDeleteDataset,
   useUploadDataset,
+  datasetUploadErrorMessage,
 } from "../lib/api/datasets";
 import type { Dataset, DatasetStatus } from "../lib/api/types";
 
@@ -98,7 +99,7 @@ export function DatasetsPage() {
             />
             {upload.isError ? (
               <div className="mb-3 rounded-lg bg-[rgba(255,107,154,.12)] px-3 py-1.5 text-[12px] text-[#ffd0e0]">
-                Upload failed — check file type and size.
+                {datasetUploadErrorMessage(upload.error)}
               </div>
             ) : null}
             <button

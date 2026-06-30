@@ -10,6 +10,7 @@ from api.loopforge.domain import DatasetColumn, DatasetProfile
 _EMAIL_RE = re.compile(r"\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b")
 _PHONE_RE = re.compile(r"(?:\+?\d[\d .-]{7,}\d)")
 _PII_NAME_RE = re.compile(r"(^|_)(email|phone|mobile|name|full_name|first_name|last_name|ssn|id|identifier)($|_)", re.I)
+_UNIQUE_TRACK_LIMIT = 10_000
 
 
 @dataclass(frozen=True)
@@ -58,18 +59,60 @@ def parse_multipart_upload(content_type: str, body: bytes) -> UploadedPart:
     return UploadedPart(filename=filename, content=file_content, name=display_name)
 
 
+@dataclass
+class _ColumnStats:
+    null_count: int = 0
+    non_null_count: int = 0
+    unique_values: set[str] | None = None
+    sample: list[str] | None = None
+    all_int: bool = True
+    all_float: bool = True
+    has_pii_value: bool = False
+    unique_overflow: bool = False
+
+    def __post_init__(self) -> None:
+        self.unique_values = set()
+        self.sample = []
+
+    def observe_unique(self, value: str) -> None:
+        if value in self.unique_values:
+            return
+        if len(self.unique_values) < _UNIQUE_TRACK_LIMIT:
+            self.unique_values.add(value)
+            return
+        self.unique_overflow = True
+
+
 def profile_csv(path: Path) -> DatasetProfile:
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle)
         if reader.fieldnames is None:
-            fieldnames: list[str] = []
-            rows: list[dict[str, str]] = []
-        else:
-            fieldnames = list(reader.fieldnames)
-            rows = [dict(row) for row in reader]
+            return DatasetProfile(row_count=0, column_count=0, columns=[])
 
-    columns = [_profile_column(name, [str(row.get(name) or "") for row in rows]) for name in fieldnames]
-    return DatasetProfile(row_count=len(rows), column_count=len(fieldnames), columns=columns)
+        fieldnames = list(reader.fieldnames)
+        stats = {name: _ColumnStats() for name in fieldnames}
+        row_count = 0
+        for row in reader:
+            row_count += 1
+            for name in fieldnames:
+                value = str(row.get(name) or "")
+                column = stats[name]
+                if not value.strip():
+                    column.null_count += 1
+                    continue
+                column.non_null_count += 1
+                column.observe_unique(value)
+                if len(column.sample) < 5:
+                    column.sample.append(value)
+                if not _can_parse_int(value):
+                    column.all_int = False
+                if not _can_parse_float(value):
+                    column.all_float = False
+                if _EMAIL_RE.search(value) or _PHONE_RE.search(value):
+                    column.has_pii_value = True
+
+    columns = [_profile_column_from_stats(name, stats[name]) for name in fieldnames]
+    return DatasetProfile(row_count=row_count, column_count=len(fieldnames), columns=columns)
 
 
 def safe_dataset_filename(filename: str) -> str:
@@ -83,10 +126,10 @@ def mask_pii_text(text: str) -> str:
     return _PHONE_RE.sub("[REDACTED_PHONE]", text)
 
 
-def _profile_column(name: str, values: list[str]) -> DatasetColumn:
-    non_null = [value for value in values if value.strip()]
-    pii_masked = _is_pii_column(name, non_null)
-    sample_values = non_null[:5]
+def _profile_column_from_stats(name: str, stats: _ColumnStats) -> DatasetColumn:
+    unique_count = stats.non_null_count if stats.unique_overflow else len(stats.unique_values or set())
+    sample_values = stats.sample or []
+    pii_masked = _is_pii_column_from_stats(name, stats, unique_count)
     if pii_masked:
         sample = [_mask_value(value, name) for value in sample_values]
     else:
@@ -94,22 +137,50 @@ def _profile_column(name: str, values: list[str]) -> DatasetColumn:
         pii_masked = sample != sample_values
     return DatasetColumn(
         name=name,
-        dtype=_infer_dtype(non_null),
-        null_count=len(values) - len(non_null),
-        unique_count=len(set(non_null)),
+        dtype=_infer_dtype_from_stats(stats),
+        null_count=stats.null_count,
+        unique_count=unique_count,
         sample=sample,
         pii_masked=pii_masked,
     )
 
 
-def _is_pii_column(name: str, values: list[str]) -> bool:
+def _is_pii_column_from_stats(name: str, stats: _ColumnStats, unique_count: int) -> bool:
     if _PII_NAME_RE.search(name):
         return True
-    if any(_EMAIL_RE.search(value) or _PHONE_RE.search(value) for value in values):
+    if stats.has_pii_value:
         return True
-    string_values = [value for value in values if _infer_dtype([value]) == "string"]
-    return len(string_values) >= 20 and len(set(string_values)) / max(len(string_values), 1) > 0.9
+    if stats.non_null_count >= 20 and not stats.all_int and not stats.all_float:
+        if stats.unique_overflow:
+            return True
+        return unique_count / max(stats.non_null_count, 1) > 0.9
+    return False
 
+
+def _infer_dtype_from_stats(stats: _ColumnStats) -> str:
+    if stats.non_null_count == 0:
+        return "string"
+    if stats.all_int:
+        return "integer"
+    if stats.all_float:
+        return "float"
+    return "string"
+
+
+def _can_parse_int(value: str) -> bool:
+    try:
+        int(value)
+        return True
+    except ValueError:
+        return False
+
+
+def _can_parse_float(value: str) -> bool:
+    try:
+        float(value)
+        return True
+    except ValueError:
+        return False
 
 def _mask_value(value: str, name: str) -> str:
     if _EMAIL_RE.search(value):
@@ -121,23 +192,6 @@ def _mask_value(value: str, name: str) -> str:
     if "id" in name.lower() or "identifier" in name.lower():
         return "[REDACTED_ID]"
     return mask_pii_text(value) if mask_pii_text(value) != value else "[REDACTED_VALUE]"
-
-
-def _infer_dtype(values: list[str]) -> str:
-    if not values:
-        return "string"
-    try:
-        for value in values:
-            int(value)
-        return "integer"
-    except ValueError:
-        pass
-    try:
-        for value in values:
-            float(value)
-        return "float"
-    except ValueError:
-        return "string"
 
 
 def _disposition_value(header: str, key: str) -> str | None:

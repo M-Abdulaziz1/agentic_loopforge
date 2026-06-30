@@ -72,6 +72,23 @@ def test_dataset_upload_profiles_masks_lists_gets_and_deletes_file(tmp_path) -> 
     assert client.get(f"/api/datasets/{dataset_id}").status_code == 404
 
 
+def test_dataset_default_size_cap_accepts_common_large_csv(tmp_path) -> None:
+    settings = Settings(dataset_storage_path=str(tmp_path / "datasets"))
+    client = TestClient(create_app(settings=settings))
+    csv_body = b"value\n" + (b"1\n" * (101 * 1024 * 1024 // 2))
+
+    uploaded = client.post(
+        "/api/datasets",
+        files={"file": ("large_creditcard_style.csv", csv_body, "text/csv")},
+    )
+
+    assert uploaded.status_code == 201
+    body = uploaded.json()
+    assert body["filename"] == "large_creditcard_style.csv"
+    assert body["status"] == "ready"
+    assert body["profile"]["row_count"] > 100_000
+
+
 def test_dataset_upload_rejects_unsupported_type_and_size_cap(tmp_path) -> None:
     settings = Settings(dataset_storage_path=str(tmp_path / "datasets"), dataset_max_size_bytes=8)
     client = TestClient(create_app(settings=settings))

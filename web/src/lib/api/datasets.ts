@@ -43,3 +43,18 @@ export function useDeleteDataset() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["datasets"] }),
   });
 }
+
+
+export function datasetUploadErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    const detail =
+      typeof error.body === "object" && error.body !== null && "detail" in error.body
+        ? String((error.body as { detail?: unknown }).detail)
+        : "";
+    if (error.status === 413) return detail || "Dataset is larger than the configured upload limit.";
+    if (error.status === 415) return detail || "Only CSV and Parquet datasets are supported.";
+    if (error.status === 422) return detail || "Upload must include a dataset file.";
+    return detail || `Upload failed with API ${error.status}.`;
+  }
+  return "Upload failed. Check the file and try again.";
+}

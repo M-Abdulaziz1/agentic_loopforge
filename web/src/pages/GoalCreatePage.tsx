@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { GlassCard } from "../components/ui/GlassCard";
 import { Toggle } from "../components/ui/Toggle";
@@ -8,9 +8,9 @@ import { lockTogglesForMode } from "../lib/capabilities";
 import { DEFAULT_AUTONOMY } from "../lib/autonomy";
 import { useCreateGoal } from "../lib/api/goals";
 import { useLlmProviders } from "../lib/api/llmProviders";
-import { useDatasets } from "../lib/api/datasets";
+import { datasetUploadErrorMessage, useDatasets, useUploadDataset } from "../lib/api/datasets";
 import { useEvaluators } from "../lib/api/evaluators";
-import type { AutonomyLevel, Budget, GoalMode, GoalToggles } from "../lib/api/types";
+import type { AutonomyLevel, Budget, Dataset, GoalMode, GoalToggles } from "../lib/api/types";
 
 const MODES: { value: GoalMode; icon: string; title: string; blurb: string }[] = [
   {
@@ -34,9 +34,14 @@ export function GoalCreatePage() {
   const createGoal = useCreateGoal();
   const { data: providers = [] } = useLlmProviders();
   const { data: datasets = [] } = useDatasets();
+  const uploadDataset = useUploadDataset();
   const { data: evaluators = [] } = useEvaluators();
   const [providerId, setProviderId] = useState("");
   const [datasetId, setDatasetId] = useState("");
+  const [datasetFile, setDatasetFile] = useState<File | null>(null);
+  const [datasetName, setDatasetName] = useState("");
+  const [uploadedDataset, setUploadedDataset] = useState<Dataset | null>(null);
+  const datasetFileRef = useRef<HTMLInputElement>(null);
   const [evaluatorId, setEvaluatorId] = useState("");
   const [autonomy, setAutonomy] = useState<AutonomyLevel>(DEFAULT_AUTONOMY);
   const [text, setText] = useState("");
@@ -54,6 +59,23 @@ export function GoalCreatePage() {
 
   const internetLocked = mode === "offline_local";
   const effectiveToggles = lockTogglesForMode(toggles, mode);
+  const selectableDatasets =
+    uploadedDataset && !datasets.some((dataset) => dataset.id === uploadedDataset.id)
+      ? [uploadedDataset, ...datasets]
+      : datasets;
+
+  async function uploadAndUseDataset() {
+    if (!datasetFile) return;
+    const uploaded = await uploadDataset.mutateAsync({
+      file: datasetFile,
+      name: datasetName || undefined,
+    });
+    setUploadedDataset(uploaded);
+    setDatasetId(uploaded.id);
+    setDatasetFile(null);
+    setDatasetName("");
+    if (datasetFileRef.current) datasetFileRef.current.value = "";
+  }
 
   async function submit() {
     const res = await createGoal.mutateAsync({
@@ -200,28 +222,59 @@ export function GoalCreatePage() {
             <div className="mb-3.5 text-[11px] font-bold uppercase tracking-wide text-mut">
               Dataset
             </div>
-            {datasets.length === 0 ? (
-              <p className="text-[13px] text-mut">
-                No datasets uploaded — the loop runs against the read-only DB only. Add one
-                under <b>Datasets</b>.
-              </p>
-            ) : (
-              <select
-                aria-label="Dataset"
-                value={datasetId}
-                onChange={(e) => setDatasetId(e.target.value)}
-                className="w-full rounded-xl border border-[var(--line2)] bg-white/[0.03] px-3.5 py-2.5 text-[14px] text-ink outline-none focus:border-[#cdbcff]"
-              >
-                <option value="" className="bg-bg0">
-                  None (DB only)
+            <select
+              aria-label="Dataset"
+              value={datasetId}
+              onChange={(e) => setDatasetId(e.target.value)}
+              className="w-full rounded-xl border border-[var(--line2)] bg-white/[0.03] px-3.5 py-2.5 text-[14px] text-ink outline-none focus:border-[#cdbcff]"
+            >
+              <option value="" className="bg-bg0">
+                None (DB only)
+              </option>
+              {selectableDatasets.map((d) => (
+                <option key={d.id} value={d.id} className="bg-bg0">
+                  {d.name} · {d.kind}
                 </option>
-                {datasets.map((d) => (
-                  <option key={d.id} value={d.id} className="bg-bg0">
-                    {d.name} · {d.kind}
-                  </option>
-                ))}
-              </select>
-            )}
+              ))}
+            </select>
+            {datasetId ? (
+              <div className="mt-2 text-[12.5px] text-mut">
+                Using {selectableDatasets.find((d) => d.id === datasetId)?.name ?? "uploaded dataset"}.
+              </div>
+            ) : null}
+            <div className="mt-4 grid gap-3 border-t border-[var(--line)] pt-4 sm:grid-cols-[1fr_170px]">
+              <div>
+                <input
+                  ref={datasetFileRef}
+                  type="file"
+                  aria-label="Upload dataset file"
+                  accept=".csv,.parquet"
+                  onChange={(e) => setDatasetFile(e.target.files?.[0] ?? null)}
+                  className="w-full text-[12px] text-ink2 file:mr-3 file:rounded-lg file:border-0 file:bg-[var(--glass2)] file:px-3 file:py-1.5 file:text-[12px] file:font-semibold file:text-ink"
+                />
+                <input
+                  type="text"
+                  aria-label="Dataset display name"
+                  value={datasetName}
+                  placeholder={datasetFile?.name ?? "Display name (optional)"}
+                  onChange={(e) => setDatasetName(e.target.value)}
+                  className="mt-2 w-full rounded-lg border border-[var(--line2)] bg-white/[0.03] px-3 py-2 text-[13px] text-ink outline-none focus:border-[#cdbcff]"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={uploadAndUseDataset}
+                disabled={!datasetFile || uploadDataset.isPending}
+                className="h-[38px] self-start rounded-xl bg-gradient-to-br from-violet to-teal px-4 text-[13px] font-bold text-white disabled:opacity-50"
+              >
+                {uploadDataset.isPending ? "Uploading…" : "Upload & use dataset"}
+              </button>
+            </div>
+            {uploadDataset.isError ? (
+              <div className="mt-3 rounded-lg bg-[rgba(255,107,154,.12)] px-3 py-1.5 text-[12px] text-[#ffd0e0]">
+                {datasetUploadErrorMessage(uploadDataset.error)}
+              </div>
+            ) : null}
           </GlassCard>
 
           <GlassCard className="mt-[18px]">
@@ -296,7 +349,7 @@ export function GoalCreatePage() {
         <button
           type="button"
           onClick={submit}
-          disabled={text.trim().length < 3 || createGoal.isPending}
+          disabled={text.trim().length < 3 || createGoal.isPending || uploadDataset.isPending}
           className="rounded-xl bg-gradient-to-br from-violet to-teal px-[22px] py-2.5 text-sm font-bold text-white shadow-[0_8px_24px_rgba(138,108,255,.35)] disabled:opacity-50"
         >
           {createGoal.isPending ? "Checking…" : "Create & check clarity →"}
