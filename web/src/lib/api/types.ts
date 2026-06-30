@@ -15,6 +15,8 @@ export type RunStatus =
 
 export type GoalMode = "offline_local" | "online_enabled";
 
+export type AutonomyLevel = "manual" | "checkpointed" | "supervised" | "autonomous";
+
 export type GoalToggles = {
   internet: boolean;
   code_sandbox: boolean;
@@ -35,7 +37,41 @@ export type GoalCreate = {
   budget: Budget;
   llm_provider_id?: string | null;
   dataset_id?: string | null;
+  evaluator_id?: string | null;
+  autonomy?: AutonomyLevel;
 };
+
+export type EvaluatorKind =
+  | "statistical_insight"
+  | "ml_baseline"
+  | "custom_metric"
+  | "llm_rubric";
+
+export type EvaluatorDirection = "minimize" | "maximize";
+
+export type Evaluator = {
+  id: string;
+  name: string;
+  kind: EvaluatorKind;
+  metric_name: string | null;
+  direction: EvaluatorDirection | null;
+  target: number | null;
+  config: Record<string, unknown>;
+  is_default: boolean;
+  created_at: string;
+};
+
+export type EvaluatorCreate = {
+  name: string;
+  kind: EvaluatorKind;
+  metric_name?: string;
+  direction?: EvaluatorDirection;
+  target?: number;
+  config?: Record<string, unknown>;
+  is_default?: boolean;
+};
+
+export type EvaluatorUpdate = Partial<Omit<EvaluatorCreate, "kind">>;
 
 export type DatasetKind = "csv" | "parquet";
 export type DatasetStatus = "uploaded" | "profiling" | "ready" | "failed";
