@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from api.loopforge.app import create_app
 from api.loopforge.domain import Goal, GoalToggles
 from api.loopforge.planner import LoopPlanner
-from api.loopforge.providers import LLMResponse, SandboxResult
+from api.loopforge.providers import FakeSandboxProvider, LLMResponse, SandboxResult
 from api.loopforge.runner import LoopRunner
 from api.loopforge.store import InMemoryStore
 from api.loopforge.tools import default_tool_registry
@@ -96,32 +96,27 @@ def test_runner_executes_llm_agent_json_in_sandbox_and_persists_artifacts() -> N
     spec = store.save_loop_spec(LoopPlanner(SequenceLLM([spec_json()])).generate_spec(goal).model_copy(update={"status": "approved", "gates": []}))
     llm = SequenceLLM(
         [
+            json.dumps({"thought": "run", "tool": "run_python", "code": "print('analysis complete')"}),
             json.dumps(
                 {
-                    "code": "print('analysis complete')",
-                    "report": "Validated analysis report",
+                    "thought": "done",
+                    "tool": "finish",
+                    "summary": "Validated analysis report",
                     "insights": [
-                        {
-                            "claim": "Revenue increased",
-                            "test": "t_test",
-                            "p_value": 0.01,
-                            "effect_name": "delta",
-                            "effect_value": 0.5,
-                            "n": 20,
-                        }
+                        {"claim": "Revenue increased", "test": "t_test", "p_value": 0.01, "effect_name": "delta", "effect_value": 0.5, "n": 20}
                     ],
                 }
-            )
+            ),
         ]
     )
-    sandbox = RecordingSandbox()
+    sandbox = FakeSandboxProvider()
     runner = LoopRunner(store=store, llm=llm, sandbox=sandbox, tools=default_tool_registry())
 
     run = runner.start(goal, spec)
     artifacts = store.list_artifacts(run.id)
 
     assert run.status == "completed"
-    assert sandbox.calls == [("print('analysis complete')", None)]
+    assert sandbox.executions == ["print('analysis complete')"]
     assert {artifact.kind for artifact in artifacts} == {"code", "report", "insight"}
     assert [artifact.metadata.get("passed") for artifact in artifacts if artifact.kind == "insight"] == [True]
 
@@ -134,7 +129,7 @@ def test_runner_honest_empty_when_evaluator_rejects_candidate() -> None:
         Evaluator(
             name="Strict target",
             kind="custom_metric",
-            metric_name="score",
+            metric_name="metric_value",
             direction="maximize",
             target=0.9,
             config={},
@@ -143,12 +138,25 @@ def test_runner_honest_empty_when_evaluator_rejects_candidate() -> None:
     )
     goal = store.save_goal(Goal(text="Produce a candidate that fails the target", autonomy="autonomous", evaluator_id=evaluator.id))
     spec = store.save_loop_spec(LoopPlanner(SequenceLLM([spec_json()])).generate_spec(goal).model_copy(update={"status": "approved", "gates": []}))
-    llm = SequenceLLM([json.dumps({"report": "weak candidate", "score": 0.1})])
+    llm = SequenceLLM(
+        [
+            json.dumps(
+                {
+                    "thought": "honest",
+                    "tool": "finish",
+                    "summary": "Weak candidate; did not meet the target.",
+                    "models": [{"name": "weak", "metric_name": "metric_value", "metric_value": 0.1, "baseline_value": 0.5, "beats_baseline": False, "leakage_ok": True}],
+                }
+            )
+        ]
+    )
 
-    run = LoopRunner(store=store, llm=llm, sandbox=RecordingSandbox(), tools=default_tool_registry()).start(goal, spec)
+    run = LoopRunner(store=store, llm=llm, sandbox=FakeSandboxProvider(), tools=default_tool_registry()).start(goal, spec)
+    kinds = {a.kind for a in store.list_artifacts(run.id)}
 
     assert run.status == "completed"
-    assert store.list_artifacts(run.id) == []
+    # Honest empty: no validated model/insight artifacts survive when the evaluator rejects them.
+    assert "model" not in kinds and "insight" not in kinds
 
 
 def test_planner_raises_for_real_llm_invalid_output() -> None:

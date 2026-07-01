@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+import shutil
 import subprocess
-from typing import Protocol
+from typing import Callable, Protocol
 from uuid import uuid4
 
 import httpx
@@ -105,9 +106,73 @@ class SandboxProvider(Protocol):
     def run_code(self, code: str, *, timeout_seconds: int, dataset_mount: DatasetMount | dict[str, object] | None = None) -> SandboxResult:
         raise NotImplementedError
 
+    def open_session(self, *, dataset_mount: DatasetMount | dict[str, object] | None = None) -> "SandboxSession":
+        raise NotImplementedError
+
 
 class SandboxProviderError(RuntimeError):
     pass
+
+
+class WorkspaceSecurityError(SandboxProviderError):
+    """Raised when an agent tool tries to touch a path outside its workspace."""
+
+
+class SandboxSession:
+    """A persistent workspace shared across every tool call in one run.
+
+    Files written by one ``run_python`` call survive to the next, so a real
+    agentic loop can profile data, write a training script, run it, read the
+    metrics it produced, and iterate — instead of a fresh throwaway sandbox
+    per step. File I/O happens on the isolated host workspace directory; code
+    execution is delegated to the provider (the container mounts *this* dir).
+    """
+
+    def __init__(
+        self,
+        *,
+        workspace: Path,
+        exec_python: Callable[[Path, str, int], SandboxResult],
+    ) -> None:
+        self.workspace = Path(workspace)
+        self._exec_python = exec_python
+
+    def run_python(self, code: str, *, timeout_seconds: int) -> SandboxResult:
+        return self._exec_python(self.workspace, code, timeout_seconds)
+
+    def _resolve(self, path: str) -> Path:
+        cleaned = str(path).strip()
+        for prefix in ("/workspace/", "/workspace", "workspace/"):
+            if cleaned.startswith(prefix):
+                cleaned = cleaned[len(prefix):]
+                break
+        cleaned = cleaned.lstrip("/") or "."
+        target = (self.workspace / cleaned).resolve()
+        root = self.workspace.resolve()
+        if target != root and root not in target.parents:
+            raise WorkspaceSecurityError(f"Path {path!r} escapes the workspace")
+        return target
+
+    def write_file(self, path: str, content: str) -> None:
+        target = self._resolve(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+
+    def read_file(self, path: str, *, max_bytes: int = 40_000) -> str:
+        target = self._resolve(path)
+        if not target.exists():
+            raise FileNotFoundError(f"{path} does not exist in the workspace")
+        data = target.read_text(encoding="utf-8", errors="replace")
+        return data[:max_bytes]
+
+    def list_dir(self, path: str = ".") -> list[str]:
+        target = self._resolve(path)
+        if not target.exists():
+            return []
+        return sorted(p.name + ("/" if p.is_dir() else "") for p in target.iterdir())
+
+    def close(self) -> None:  # pragma: no cover - best effort cleanup
+        shutil.rmtree(self.workspace, ignore_errors=True)
 
 
 class DockerGvisorSandboxProvider:
@@ -130,10 +195,27 @@ class DockerGvisorSandboxProvider:
         self.cpus = cpus
         self.command_runner = command_runner or self._run_subprocess
 
+    def open_session(self, *, dataset_mount: DatasetMount | dict[str, object] | None = None) -> SandboxSession:
+        workspace = self.workspace_root / uuid4().hex
+        workspace.mkdir(parents=True, exist_ok=False)
+        (workspace / "data").mkdir(parents=True, exist_ok=True)
+        (workspace / "output").mkdir(parents=True, exist_ok=True)
+        mount = _normalize_dataset_mount(dataset_mount)
+
+        def exec_python(ws: Path, code: str, timeout: int) -> SandboxResult:
+            return self._run_in_workspace(ws, code, timeout_seconds=timeout, mount=mount)
+
+        return SandboxSession(workspace=workspace, exec_python=exec_python)
+
     def run_code(self, code: str, *, timeout_seconds: int, dataset_mount: DatasetMount | dict[str, object] | None = None) -> SandboxResult:
         workspace = self.workspace_root / uuid4().hex
         workspace.mkdir(parents=True, exist_ok=False)
         (workspace / "data").mkdir(parents=True, exist_ok=True)
+        return self._run_in_workspace(
+            workspace, code, timeout_seconds=timeout_seconds, mount=_normalize_dataset_mount(dataset_mount)
+        )
+
+    def _run_in_workspace(self, workspace: Path, code: str, *, timeout_seconds: int, mount: DatasetMount | None) -> SandboxResult:
         script = workspace / "main.py"
         script.write_text(code, encoding="utf-8")
 
@@ -155,7 +237,6 @@ class DockerGvisorSandboxProvider:
             "-v",
             f"{workspace}:/workspace:rw",
         ]
-        mount = _normalize_dataset_mount(dataset_mount)
         if mount is not None:
             command.extend(["-v", f"{Path(mount.host_path)}:/workspace/data/{Path(mount.filename).name}:ro"])
         command.extend([
@@ -188,10 +269,25 @@ class DockerGvisorSandboxProvider:
 @dataclass
 class FakeSandboxProvider:
     executions: list[str] = field(default_factory=list)
+    workspace_root: str | Path | None = None
 
     def run_code(self, code: str, *, timeout_seconds: int, dataset_mount: DatasetMount | dict[str, object] | None = None) -> SandboxResult:
         self.executions.append(code)
         return SandboxResult(exit_code=0, stdout="sandbox execution simulated")
+
+    def open_session(self, *, dataset_mount: DatasetMount | dict[str, object] | None = None) -> SandboxSession:
+        import tempfile
+
+        root = Path(self.workspace_root) if self.workspace_root else Path(tempfile.mkdtemp(prefix="loopforge-fake-"))
+        workspace = root / uuid4().hex
+        (workspace / "data").mkdir(parents=True, exist_ok=True)
+        (workspace / "output").mkdir(parents=True, exist_ok=True)
+
+        def exec_python(_ws: Path, code: str, _timeout: int) -> SandboxResult:
+            self.executions.append(code)
+            return SandboxResult(exit_code=0, stdout="sandbox execution simulated")
+
+        return SandboxSession(workspace=workspace, exec_python=exec_python)
 
 
 def _normalize_dataset_mount(mount: DatasetMount | dict[str, object] | None) -> DatasetMount | None:

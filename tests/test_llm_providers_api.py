@@ -182,6 +182,6 @@ def test_run_uses_goal_provider_then_default_provider(monkeypatch) -> None:
     assert created_for == ["Selected", "Selected", "Default", "Default"]
     assert [call[0] for call in selected_llm.calls[:2]] == [CLARITY_SYSTEM, SPEC_SYSTEM]
     assert [call[0] for call in default_llm.calls[:2]] == [CLARITY_SYSTEM, SPEC_SYSTEM]
-    assert len(selected_llm.calls) == 3
-    assert len(default_llm.calls) == 3
+    assert len(selected_llm.calls) >= 3  # 2 planning + at least one execution turn through the same provider
+    assert len(default_llm.calls) >= 3
     assert env_llm.calls == []
