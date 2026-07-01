@@ -5,6 +5,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
+from api.loopforge.domain import ContextPack
 from api.loopforge.providers import LLMProvider, SandboxProviderError, SandboxResult, SandboxSession
 
 # The instruction block appended to every agent's own system prompt. It turns a
@@ -62,6 +63,7 @@ class LoopHooks:
     count_llm_call: Callable[[int], None]
     emit: Callable[[str, str, dict[str, Any]], None]
     on_code_run: Callable[[str, SandboxResult], None]
+    build_context_pack: Callable[[], ContextPack] | None = None
 
 
 @dataclass
@@ -73,6 +75,7 @@ class LoopResult:
     insights: list[dict[str, Any]] = field(default_factory=list)
     models: list[dict[str, Any]] = field(default_factory=list)
     failure: str | None = None
+    context_overflow: bool = False
 
 
 class AgentLoop:
@@ -103,13 +106,24 @@ class AgentLoop:
                 result.budget_exhausted = True
                 return result
 
-            prompt = header + "\n\n" + _render_transcript(transcript) + "\n\nEmit your next single JSON action."
+            context_pack = self.hooks.build_context_pack() if self.hooks.build_context_pack is not None else None
+            if context_pack is not None and context_pack.overflow:
+                result.context_overflow = True
+                return result
+            prompt = (
+                header
+                + "\n\n"
+                + _render_context_pack(context_pack)
+                + "\n\n"
+                + _render_transcript(transcript)
+                + "\n\nEmit your next single JSON action."
+            )
             response = self.llm.complete(system=system, prompt=prompt)
             self.hooks.count_llm_call(response.tokens_used)
             self.hooks.emit(
                 "llm_call",
                 f"{agent.name} reasoned about the next step",
-                {"agent": agent.name, "tokens": response.tokens_used, "turn": turn + 1},
+                {"agent": agent.name, "tokens": response.tokens_used, "turn": turn + 1, "context_tokens": context_pack.token_count if context_pack is not None else None},
             )
 
             action = _parse_action(response.text)
@@ -200,6 +214,24 @@ def _header(goal_text: str, success_criteria: list[str], dataset_note: str, prio
     if prior_note:
         parts.append(f"<handoff_from_previous_agent>{prior_note}</handoff_from_previous_agent>")
     return "\n".join(parts)
+
+
+def _render_context_pack(pack: ContextPack | None) -> str:
+    if pack is None:
+        return "<context_pack>No external run context provided.</context_pack>"
+    lines = ["<context_pack>", f"token_count={pack.token_count}"]
+    if pack.summary:
+        lines.append("<compacted_summary>")
+        lines.append(pack.summary)
+        lines.append("</compacted_summary>")
+    if pack.entries:
+        lines.append("<entries>")
+        for entry in pack.entries:
+            tags = ",".join(entry.tags)
+            lines.append(f"- kind={entry.kind}; tags={tags}; text={entry.text}")
+        lines.append("</entries>")
+    lines.append("</context_pack>")
+    return "\n".join(lines)
 
 
 def _render_transcript(transcript: list[str]) -> str:

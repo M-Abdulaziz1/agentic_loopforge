@@ -6,7 +6,7 @@ from api.loopforge.agent_loop import AgentLoop, LoopHooks, LoopResult
 from api.loopforge.context import ContextManager
 from api.loopforge.domain import Artifact, ContextEntry, Evaluator, Gate, Goal, LoopSpec, Run, RunEvent, RunStatus, now_utc
 from api.loopforge.evaluators import EvaluationCandidate, MlBaselineEvaluator, build_evaluator_provider
-from api.loopforge.providers import DatasetMount, LLMProvider, SandboxProvider, SandboxProviderError, SandboxResult
+from api.loopforge.providers import DatasetMount, LLMProvider, LLMResponse, SandboxProvider, SandboxProviderError, SandboxResult
 from api.loopforge.store import Store
 from api.loopforge.tools import ToolRegistry
 
@@ -75,6 +75,20 @@ class LoopRunner:
         evaluator_provider = build_evaluator_provider(self.evaluator, llm=self.llm, sandbox=self.sandbox)
         dataset_note = self._dataset_note()
 
+        def build_context_pack(agent_name: str):
+            manager = ContextManager(
+                max_tokens=goal.budget.max_context_tokens,
+                compactor_llm=_CountingContextCompactor(runner=self, run=run, agent_name=agent_name),
+            )
+            pack = manager.build_pack(
+                self.store.list_context(run.id),
+                task=f"execute next turn for {agent_name}",
+                required_tags=["required"],
+            )
+            if pack.summary and not pack.overflow:
+                self._append_compaction_context(run, pack.summary)
+            return pack
+
         hooks = LoopHooks(
             consume_step=lambda: self._consume_step(run, goal),
             count_llm_call=lambda tokens: self._record_llm_call(run),
@@ -95,6 +109,7 @@ class LoopRunner:
             if remaining <= 0:
                 return self._budget_exhausted(run)
 
+            hooks.build_context_pack = lambda agent_name=agent.name: build_context_pack(agent_name)
             loop = AgentLoop(llm=self.llm, session=session, hooks=hooks, max_turns=remaining)
             result = loop.run(
                 agent=agent,
@@ -107,6 +122,8 @@ class LoopRunner:
 
             if result.budget_exhausted:
                 return self._budget_exhausted(run)
+            if result.context_overflow:
+                return self._context_overflow(run)
             if result.failure:
                 return self._fail_run(run, result.failure)
 
@@ -122,6 +139,12 @@ class LoopRunner:
         self.store.save_run(completed)
         self._event(completed, "run_status", "Run completed", {"status": completed.status, "validated": validated_any})
         return completed
+
+    def _append_compaction_context(self, run: Run, summary: str) -> None:
+        existing = [entry.text for entry in self.store.list_context(run.id) if "compaction" in entry.tags]
+        if summary in existing:
+            return
+        self.store.append_context(ContextEntry(run_id=run.id, kind="compaction", text=summary[:4000], tags=["compaction", "agent_output"]))
 
     def _dataset_note(self) -> str:
         if self.dataset_mount is None:
@@ -188,6 +211,12 @@ class LoopRunner:
         run.spent_steps = updated.spent_steps
         return True
 
+    def _context_overflow(self, run: Run) -> Run:
+        overflowed = run.model_copy(update={"status": RunStatus.CONTEXT_OVERFLOW, "ended_at": now_utc()})
+        self.store.save_run(overflowed)
+        self._event(overflowed, "run_status", "Context pack could not fit within budget", {"status": overflowed.status})
+        return overflowed
+
     def _budget_exhausted(self, run: Run) -> Run:
         exhausted = run.model_copy(update={"status": RunStatus.BUDGET_EXHAUSTED, "ended_at": now_utc()})
         self.store.save_run(exhausted)
@@ -202,3 +231,21 @@ class LoopRunner:
 
     def _event(self, run: Run, event_type: str, message: str, payload: dict[str, object] | None = None) -> None:
         self.store.append_event(RunEvent(run_id=run.id, seq=0, type=event_type, message=message, payload=payload or {}))
+
+
+class _CountingContextCompactor:
+    def __init__(self, *, runner: LoopRunner, run: Run, agent_name: str) -> None:
+        self.runner = runner
+        self.run = run
+        self.agent_name = agent_name
+
+    def complete(self, *, system: str, prompt: str) -> LLMResponse:
+        response = self.runner.llm.complete(system=system, prompt=prompt)
+        self.runner._record_llm_call(self.run)
+        self.runner._event(
+            self.run,
+            "llm_call",
+            "Context manager compacted omitted run context",
+            {"agent": self.agent_name, "tokens": response.tokens_used, "purpose": "context_compaction"},
+        )
+        return response

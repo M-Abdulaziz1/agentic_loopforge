@@ -4,7 +4,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from api.loopforge.domain import Goal, LoopSpec, LoopSpecAgent
+from api.loopforge.domain import Budget, ContextEntry, Goal, LoopSpec, LoopSpecAgent
 from api.loopforge.providers import LLMResponse, SandboxProviderError, SandboxResult, SandboxSession
 from api.loopforge.runner import LoopRunner
 from api.loopforge.store import InMemoryStore
@@ -230,3 +230,47 @@ def test_run_fails_clearly_when_required_package_is_missing() -> None:
     events = store.list_events(run.id)
     assert events[-1].type == "run_status"
     assert "ModuleNotFoundError" in store.list_artifacts(run.id)[0].metadata["stderr"]
+
+
+def test_agent_prompt_receives_compacted_run_context_each_turn() -> None:
+    store = InMemoryStore()
+    goal = store.save_goal(Goal(text="Continue from packed context", autonomy="autonomous"))
+    agent = LoopSpecAgent(name="Worker", role="work", system_prompt="Work from context.", tools=["code_sandbox"])
+    spec = store.save_loop_spec(_spec(goal.id, [agent], ["ok"]))
+    store.append_context(ContextEntry(run_id="placeholder", kind="decision", text="Decision: use threshold 0.7", tags=["decision"]))
+    llm = SequenceLLM([json.dumps({"thought": "done", "tool": "finish", "summary": "Used packed context."})])
+
+    run = LoopRunner(store=store, llm=llm, sandbox=LocalSubprocessSandbox(), tools=default_tool_registry()).start(goal, spec)
+
+    assert run.status == "completed"
+    assert "<context_pack>" in llm.calls[0][1]
+    assert "Continue from packed context" in llm.calls[0][1]
+
+
+def test_agent_prompt_includes_compacted_summary_from_same_llm() -> None:
+    store = InMemoryStore()
+    goal = store.save_goal(Goal(text="Use prior decision", autonomy="autonomous", budget=Budget(max_steps=20, max_llm_calls=20, max_context_tokens=512)))
+    agent = LoopSpecAgent(name="Worker", role="work", system_prompt="Work from context.", tools=["code_sandbox"])
+    spec = store.save_loop_spec(_spec(goal.id, [agent], ["ok"]))
+    llm = SequenceLLM([
+        "COMPACTED: prior decision says use recall",
+        json.dumps({"thought": "done", "tool": "finish", "summary": "Used compacted context."}),
+    ])
+
+    # This run-level context is appended after run creation by the runner, so use a subclass hook below.
+    class ContextSeedingStore(InMemoryStore):
+        def save_run(self, run):
+            saved = super().save_run(run)
+            if not self.list_context(saved.id):
+                self.append_context(ContextEntry(run_id=saved.id, kind="decision", text="Decision: optimize fraud recall above all else " * 200, tags=["decision"]))
+            return saved
+
+    seeded = ContextSeedingStore()
+    goal = seeded.save_goal(goal)
+    spec = seeded.save_loop_spec(spec.model_copy(update={"goal_id": goal.id}))
+
+    run = LoopRunner(store=seeded, llm=llm, sandbox=LocalSubprocessSandbox(), tools=default_tool_registry()).start(goal, spec)
+
+    assert run.status == "completed"
+    assert "Context compaction" in llm.calls[0][0]
+    assert "COMPACTED: prior decision says use recall" in llm.calls[1][1]
