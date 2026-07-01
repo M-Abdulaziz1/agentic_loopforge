@@ -30,7 +30,7 @@ export function RunPage() {
   const { data: pendingGates = [] } = useGates("pending");
 
   const agentNames = spec?.agents.map((a) => a.name) ?? [];
-  const view = reduceRunEvents(events, agentNames);
+  const view = reduceRunEvents(events, agentNames, run?.status);
   const gate =
     pendingGates.find((g) => g.id === view.pendingGate?.gateId) ??
     pendingGates.find((g) => g.run_id === runId);

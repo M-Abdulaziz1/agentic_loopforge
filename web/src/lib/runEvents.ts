@@ -21,7 +21,11 @@ function str(v: unknown): string | undefined {
  * Pure fold of a run's event stream into the state the Run view renders.
  * Deterministic and order-independent (sorts by seq).
  */
-export function reduceRunEvents(events: RunEvent[], agentNames: string[]): RunView {
+export function reduceRunEvents(
+  events: RunEvent[],
+  agentNames: string[],
+  liveStatus?: RunStatus | null,
+): RunView {
   const agentStatus: Record<string, AgentStatus> = {};
   const eventsByAgent: Record<string, RunEvent[]> = {};
   for (const name of agentNames) {
@@ -67,6 +71,19 @@ export function reduceRunEvents(events: RunEvent[], agentNames: string[]): RunVi
       }
       default:
         break;
+    }
+  }
+
+  // Once the run is no longer active, nothing can still be "running": a run that
+  // was cancelled/failed mid-agent leaves a node_start with no node_end. Clamp so
+  // the UI never spins an agent on a stopped run.
+  const effective = liveStatus ?? runStatus;
+  const active = effective == null || effective === "running" || effective === "pending_approval";
+  if (!active) {
+    for (const name of agentNames) {
+      if (agentStatus[name] === "running") {
+        agentStatus[name] = effective === "completed" ? "done" : "idle";
+      }
     }
   }
 

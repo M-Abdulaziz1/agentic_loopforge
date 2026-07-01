@@ -53,6 +53,20 @@ test("a node_start after a pending gate clears it (gate approved → loop resume
   expect(view.agentStatus.reporter).toBe("running");
 });
 
+test("a cancelled run does not leave an agent stuck running", () => {
+  const view = reduceRunEvents(
+    [ev(1, "node_start", { agent: "analyst" })],
+    agents,
+    "cancelled",
+  );
+  expect(view.agentStatus.analyst).toBe("idle");
+});
+
+test("a completed run marks a still-open agent as done", () => {
+  const view = reduceRunEvents([ev(1, "node_start", { agent: "reporter" })], agents, "completed");
+  expect(view.agentStatus.reporter).toBe("done");
+});
+
 test("events are reduced in seq order regardless of input order", () => {
   const view = reduceRunEvents(
     [ev(2, "node_end", { agent: "planner" }), ev(1, "node_start", { agent: "planner" })],

@@ -201,27 +201,15 @@ const ACCENT: Record<AgentStatus, string> = {
 function Tile({ name, status }: { name: string; status: AgentStatus }) {
   return (
     <div className="relative grid size-12 shrink-0 place-items-center">
-      {status === "running" ? (
-        <span
-          className="absolute inset-[-4px] rounded-2xl"
-          style={{
-            background: "conic-gradient(from 0deg, transparent 0 68%, var(--teal) 88%, transparent 100%)",
-            animation: "lf-orbit 2s linear infinite",
-            mask: "radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px))",
-            WebkitMask: "radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px))",
-          }}
-        />
-      ) : null}
       <div
         className={cn(
           "grid size-12 place-items-center rounded-2xl border font-display text-[16px] font-bold transition",
           status === "done"
             ? "border-[rgba(70,227,173,.45)] bg-[rgba(70,227,173,.14)] text-ok"
             : status === "running"
-              ? "border-transparent bg-gradient-to-br from-violet to-teal text-white shadow-[0_0_26px_rgba(138,108,255,.55)]"
+              ? "border-transparent bg-gradient-to-br from-violet to-teal text-white shadow-[0_0_24px_rgba(138,108,255,.5)]"
               : "border-[var(--line2)] bg-[var(--glass)] text-ink2",
         )}
-        style={status === "running" ? { animation: "lf-pulse 1.6s ease-in-out infinite" } : undefined}
       >
         {monogram(name)}
       </div>
