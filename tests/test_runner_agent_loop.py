@@ -3,7 +3,7 @@ import tempfile
 from pathlib import Path
 
 from api.loopforge.domain import Goal, LoopSpec, LoopSpecAgent
-from api.loopforge.providers import LLMResponse, SandboxResult, SandboxSession
+from api.loopforge.providers import LLMResponse, SandboxProviderError, SandboxResult, SandboxSession
 from api.loopforge.runner import LoopRunner
 from api.loopforge.store import InMemoryStore
 from api.loopforge.tools import default_tool_registry
@@ -83,6 +83,8 @@ def test_agent_observes_real_execution_output_and_persists_grounded_artifacts() 
     assert sandbox.ran and "pandas" in sandbox.ran[0]
     kinds = {a.kind for a in store.list_artifacts(run.id)}
     assert {"code", "report", "insight"} <= kinds
+    assert "Allowed Python packages" in llm.calls[0][0]
+    assert "Do not use imbalanced-learn" in llm.calls[0][0]
     # The feedback loop is real: the finish turn's prompt contained the actual stdout.
     assert "rows 100" in llm.calls[1][1]
     tool_events = [e for e in store.list_events(run.id) if e.type == "tool_call"]
@@ -165,3 +167,49 @@ def test_run_fails_when_real_llm_never_returns_a_valid_action() -> None:
     assert run.result_summary == "Agent never returned a valid JSON action."
     assert store.list_artifacts(run.id) == []
     assert [event.type for event in store.list_events(run.id)][-1] == "run_status"
+
+class FailingOpenSandbox:
+    def __init__(self, message: str) -> None:
+        self.message = message
+
+    def run_code(self, code: str, *, timeout_seconds: int, dataset_mount=None) -> SandboxResult:
+        raise AssertionError("run_code should not be called")
+
+    def open_session(self, *, dataset_mount=None) -> SandboxSession:
+        raise SandboxProviderError(self.message)
+
+
+def test_run_fails_clearly_when_sandbox_cannot_start() -> None:
+    store = InMemoryStore()
+    goal = store.save_goal(Goal(text="Train a fraud model", autonomy="autonomous"))
+    agent = LoopSpecAgent(name="Trainer", role="train", system_prompt="Train.", tools=["code_sandbox"])
+    spec = store.save_loop_spec(_spec(goal.id, [agent], ["ok"]))
+    llm = SequenceLLM([json.dumps({"thought": "train", "tool": "run_python", "code": "print('x')"})])
+
+    run = LoopRunner(
+        store=store,
+        llm=llm,
+        sandbox=FailingOpenSandbox("Docker gVisor sandbox failed to start: docker not found"),
+        tools=default_tool_registry(),
+    ).start(goal, spec)
+
+    assert run.status == "failed"
+    assert "Docker gVisor sandbox failed to start" in (run.result_summary or "")
+    assert store.list_artifacts(run.id) == []
+
+
+def test_run_fails_clearly_when_required_package_is_missing() -> None:
+    store = InMemoryStore()
+    goal = store.save_goal(Goal(text="Train a fraud model", autonomy="autonomous"))
+    agent = LoopSpecAgent(name="Trainer", role="train", system_prompt="Train.", tools=["code_sandbox"])
+    spec = store.save_loop_spec(_spec(goal.id, [agent], ["ok"]))
+    llm = SequenceLLM([json.dumps({"thought": "train", "tool": "run_python", "code": "import pandas as pd"})])
+    sandbox = ScriptedSandbox([SandboxResult(exit_code=1, stdout="", stderr="ModuleNotFoundError: No module named 'pandas'")])
+
+    run = LoopRunner(store=store, llm=llm, sandbox=sandbox, tools=default_tool_registry()).start(goal, spec)
+
+    assert run.status == "failed"
+    assert "Sandbox Python environment is missing package 'pandas'" in (run.result_summary or "")
+    events = store.list_events(run.id)
+    assert events[-1].type == "run_status"
+    assert store.list_artifacts(run.id)[0].metadata["stderr"] == "ModuleNotFoundError: No module named 'pandas'"

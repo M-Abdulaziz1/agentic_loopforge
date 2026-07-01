@@ -6,7 +6,7 @@ from api.loopforge.agent_loop import AgentLoop, LoopHooks, LoopResult
 from api.loopforge.context import ContextManager
 from api.loopforge.domain import Artifact, ContextEntry, Evaluator, Gate, Goal, LoopSpec, Run, RunEvent, RunStatus, now_utc
 from api.loopforge.evaluators import EvaluationCandidate, MlBaselineEvaluator, build_evaluator_provider
-from api.loopforge.providers import DatasetMount, LLMProvider, SandboxProvider, SandboxResult
+from api.loopforge.providers import DatasetMount, LLMProvider, SandboxProvider, SandboxProviderError, SandboxResult
 from api.loopforge.store import Store
 from api.loopforge.tools import ToolRegistry
 
@@ -68,7 +68,10 @@ class LoopRunner:
 
     def _complete_execution(self, run: Run, goal: Goal, spec: LoopSpec, *, first_agent_started: bool) -> Run:
         agents = spec.agents[:1] if bool(getattr(self.llm, "offline_stub", False)) else spec.agents
-        session = self.sandbox.open_session(dataset_mount=self.dataset_mount)
+        try:
+            session = self.sandbox.open_session(dataset_mount=self.dataset_mount)
+        except SandboxProviderError as exc:
+            return self._fail_run(run, str(exc))
         evaluator_provider = build_evaluator_provider(self.evaluator, llm=self.llm, sandbox=self.sandbox)
         dataset_note = self._dataset_note()
 

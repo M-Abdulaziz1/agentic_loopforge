@@ -60,7 +60,7 @@ from api.loopforge.datasets import parse_multipart_upload, profile_csv, safe_dat
 from api.loopforge.planner import LoopPlanner, PlannerError
 from api.loopforge.runner import LoopRunner
 from api.loopforge.providers import DatasetMount, LLMProviderError
-from api.loopforge.runtime import create_llm_provider, create_llm_provider_from_config, create_sandbox_provider
+from api.loopforge.runtime import create_execution_sandbox_provider, create_llm_provider, create_llm_provider_from_config
 from api.loopforge.secrets import SecretCipher
 from api.loopforge.settings import Settings
 from api.loopforge.sqlite_store import SQLiteStore
@@ -89,7 +89,6 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
     settings = settings or Settings()
     store = store or InMemoryStore()
     secret_cipher = SecretCipher(settings.secret_key)
-    sandbox = create_sandbox_provider(settings)
     tools = default_tool_registry()
 
     @app.get("/api/goals")
@@ -448,9 +447,11 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
         if spec.status != "approved":
             raise HTTPException(status_code=409, detail="Loop spec must be approved before running")
         evaluator = _evaluator_for_goal(store, goal)
+        llm = _llm_for_goal(store, settings, goal)
+        sandbox = create_execution_sandbox_provider(settings, llm=llm, goal=goal)
         runner = LoopRunner(
             store=store,
-            llm=_llm_for_goal(store, settings, goal),
+            llm=llm,
             sandbox=sandbox,
             tools=tools,
             dataset_mount=_dataset_mount_for_goal(store, goal),
@@ -605,9 +606,11 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
                 spec = store.get_loop_spec(run.loop_spec_id)
             except KeyError as exc:
                 raise HTTPException(status_code=404, detail="Run goal or loop spec not found") from exc
+            llm = _llm_for_goal(store, settings, goal)
+            sandbox = create_execution_sandbox_provider(settings, llm=llm, goal=goal)
             runner = LoopRunner(
                 store=store,
-                llm=_llm_for_goal(store, settings, goal),
+                llm=llm,
                 sandbox=sandbox,
                 tools=tools,
                 dataset_mount=_dataset_mount_for_goal(store, goal),

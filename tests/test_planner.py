@@ -1,6 +1,27 @@
 from api.loopforge.domain import Goal, GoalMode, GoalToggles, RunStatus
 from api.loopforge.planner import LoopPlanner
-from api.loopforge.providers import FakeLLMProvider
+from api.loopforge.providers import FakeLLMProvider, LLMResponse
+
+
+class RecordingLLM:
+    def __init__(self, responses: list[str]) -> None:
+        self.responses = list(responses)
+        self.calls: list[tuple[str, str]] = []
+
+    def complete(self, *, system: str, prompt: str) -> LLMResponse:
+        self.calls.append((system, prompt))
+        return LLMResponse(text=self.responses.pop(0), tokens_used=1)
+
+
+def spec_payload() -> str:
+    return (
+        '{"agents":[{"name":"Trainer","role":"train",'
+        '"system_prompt":"Train with approved packages only.","tools":["code_sandbox"]}], '
+        '"tool_permissions":[{"tool_name":"code_sandbox","enabled":true,"reason":"run code"}], '
+        '"handoffs":[], "success_criteria":["model beats baseline"], '
+        '"failure_criteria":["missing package"], "context_policy":{}, '
+        '"improvement_strategy":"iterate once"}'
+    )
 
 
 def test_planner_requests_clarification_for_vague_goal() -> None:
@@ -45,3 +66,15 @@ def test_planner_includes_web_tool_when_internet_toggle_is_enabled() -> None:
 
     enabled_tools = [permission.tool_name for permission in spec.tool_permissions if permission.enabled]
     assert "web_search" in enabled_tools
+
+def test_spec_prompt_explains_sandbox_package_policy() -> None:
+    llm = RecordingLLM([spec_payload()])
+    goal = Goal(text="Build a fraud model from the uploaded credit-card CSV")
+
+    LoopPlanner(llm=llm).generate_spec(goal)
+
+    system, prompt = llm.calls[0]
+    combined = system + "\n" + prompt
+    assert "Allowed Python packages" in combined
+    assert "scikit-learn" in combined
+    assert "Do not use imbalanced-learn" in combined

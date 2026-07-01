@@ -58,3 +58,21 @@ def create_sandbox_provider(settings: Settings) -> SandboxProvider:
             cpus=settings.docker_cpus,
         )
     return FakeSandboxProvider()
+
+
+def create_execution_sandbox_provider(settings: Settings, *, llm: LLMProvider, goal: Goal) -> SandboxProvider:
+    configured = create_sandbox_provider(settings)
+    if settings.sandbox_provider == SandboxProviderMode.DOCKER_GVISOR:
+        return configured
+    if bool(getattr(llm, "offline_stub", False)):
+        return configured
+    if goal.toggles.code_sandbox:
+        return DockerGvisorSandboxProvider(
+            runtime=settings.docker_gvisor_runtime,
+            image=settings.docker_sandbox_image,
+            workspace_root=settings.docker_workspace_root,
+            network=settings.docker_network,
+            memory=settings.docker_memory,
+            cpus=settings.docker_cpus,
+        )
+    return configured
