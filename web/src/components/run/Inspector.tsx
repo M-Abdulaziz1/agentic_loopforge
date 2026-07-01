@@ -90,9 +90,16 @@ export function Inspector({
             </Field>
           </div>
         ) : (
-          <p className="text-[13px] leading-relaxed text-mut">
-            Select an agent on the canvas to inspect its prompt, tools, and activity.
-          </p>
+          <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-[var(--line2)] bg-white/[0.015] px-5 py-10 text-center">
+            <div className="grid size-11 place-items-center rounded-2xl border border-[var(--line2)] bg-[var(--glass)] text-lg text-mut">
+              ◎
+            </div>
+            <div className="text-[13px] font-semibold text-ink2">Nothing selected</div>
+            <p className="max-w-[220px] text-[12px] leading-relaxed text-mut">
+              Pick an agent in the pipeline to inspect its system prompt, tools, handoffs, and live
+              activity.
+            </p>
+          </div>
         )}
 
         {gate ? (
