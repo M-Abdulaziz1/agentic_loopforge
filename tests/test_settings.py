@@ -1,11 +1,11 @@
 from api.loopforge.settings import LLMProviderMode, SandboxProviderMode, Settings
 
 
-def test_settings_default_to_fake_providers() -> None:
+def test_settings_default_to_real_local_providers() -> None:
     settings = Settings()
 
-    assert settings.llm_provider == LLMProviderMode.FAKE
-    assert settings.sandbox_provider == SandboxProviderMode.FAKE
+    assert settings.llm_provider == LLMProviderMode.OPENAI_COMPATIBLE
+    assert settings.sandbox_provider == SandboxProviderMode.DOCKER_GVISOR
     assert settings.openai_compatible_base_url == "http://localhost:8000/v1"
     assert settings.openai_compatible_model == "local-model"
     assert settings.storage_path == ".loopforge/loopforge.db"

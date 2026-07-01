@@ -1,8 +1,38 @@
+import subprocess
+import sys
+import tempfile
+
 from api.loopforge.domain import Budget, Goal, LoopSpec, LoopSpecAgent, RunStatus, ToolPermission
-from api.loopforge.providers import FakeLLMProvider, FakeSandboxProvider
+from api.loopforge.providers import LLMResponse, SandboxResult, SandboxSession
 from api.loopforge.runner import LoopRunner
 from api.loopforge.store import InMemoryStore
 from api.loopforge.tools import default_tool_registry
+
+
+class StaticLLM:
+    def complete(self, *, system: str, prompt: str) -> LLMResponse:
+        return LLMResponse(text='{"tool":"finish","summary":"done"}', tokens_used=1)
+
+
+class LocalWorkspaceSandbox:
+    def run_code(self, code: str, *, timeout_seconds: int, dataset_mount=None) -> SandboxResult:
+        return SandboxResult(exit_code=0, stdout="")
+
+    def open_session(self, *, dataset_mount=None) -> SandboxSession:
+        workspace = Path(tempfile.mkdtemp(prefix="lf-runner-test-"))
+        (workspace / "data").mkdir(parents=True, exist_ok=True)
+        (workspace / "output").mkdir(parents=True, exist_ok=True)
+
+        def exec_python(ws: Path, code: str, timeout: int) -> SandboxResult:
+            script = ws / "main.py"
+            script.write_text(code, encoding="utf-8")
+            completed = subprocess.run([sys.executable, str(script)], cwd=ws, timeout=timeout, capture_output=True, text=True, check=False)
+            return SandboxResult(exit_code=completed.returncode, stdout=completed.stdout, stderr=completed.stderr)
+
+        return SandboxSession(workspace=workspace, exec_python=exec_python)
+
+
+from pathlib import Path
 
 
 def make_spec(goal_id: str) -> LoopSpec:
@@ -27,8 +57,8 @@ def test_runner_pauses_at_configured_gate_and_records_contract_events() -> None:
     spec = store.save_loop_spec(make_spec(goal.id))
     runner = LoopRunner(
         store=store,
-        llm=FakeLLMProvider(),
-        sandbox=FakeSandboxProvider(),
+        llm=StaticLLM(),
+        sandbox=LocalWorkspaceSandbox(),
         tools=default_tool_registry(),
     )
 
@@ -49,8 +79,8 @@ def test_runner_stops_when_step_budget_is_exhausted() -> None:
     spec = store.save_loop_spec(make_spec(goal.id))
     runner = LoopRunner(
         store=store,
-        llm=FakeLLMProvider(),
-        sandbox=FakeSandboxProvider(),
+        llm=StaticLLM(),
+        sandbox=LocalWorkspaceSandbox(),
         tools=default_tool_registry(),
     )
 

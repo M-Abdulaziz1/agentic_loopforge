@@ -67,7 +67,7 @@ class LoopRunner:
         return self._complete_execution(running, goal, spec, first_agent_started=True)
 
     def _complete_execution(self, run: Run, goal: Goal, spec: LoopSpec, *, first_agent_started: bool) -> Run:
-        agents = spec.agents[:1] if bool(getattr(self.llm, "offline_stub", False)) else spec.agents
+        agents = spec.agents
         try:
             session = self.sandbox.open_session(dataset_mount=self.dataset_mount)
         except SandboxProviderError as exc:

@@ -26,7 +26,8 @@ def test_create_template_snapshots_loop_spec() -> None:
     assert response.status_code == 201
     assert body["name"] == "Release checklist"
     assert body["description"] == "Reusable backend release loop"
-    assert body["agents"][0]["name"] == "Loop Planner"
+    source = client.get(f"/api/loop-specs/{spec_id}").json()
+    assert body["agents"] == source["agents"]
     assert "status" not in body
 
 

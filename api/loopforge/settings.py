@@ -7,12 +7,10 @@ from pydantic import BaseModel, Field
 
 
 class LLMProviderMode(StrEnum):
-    FAKE = "fake"
     OPENAI_COMPATIBLE = "openai_compatible"
 
 
 class SandboxProviderMode(StrEnum):
-    FAKE = "fake"
     DOCKER_GVISOR = "docker_gvisor"
 
 
@@ -21,8 +19,8 @@ class Settings(BaseModel):
     dataset_storage_path: str = ".loopforge/datasets"
     dataset_max_size_bytes: int = 256 * 1024 * 1024
     secret_key: str = "loopforge-local-secret"
-    llm_provider: LLMProviderMode = LLMProviderMode.FAKE
-    sandbox_provider: SandboxProviderMode = SandboxProviderMode.FAKE
+    llm_provider: LLMProviderMode = LLMProviderMode.OPENAI_COMPATIBLE
+    sandbox_provider: SandboxProviderMode = SandboxProviderMode.DOCKER_GVISOR
     openai_compatible_base_url: str = "http://localhost:8000/v1"
     openai_compatible_api_key: str = "local-dev-key"
     openai_compatible_model: str = "local-model"
@@ -41,8 +39,8 @@ class Settings(BaseModel):
             dataset_storage_path=os.getenv("LOOPFORGE_DATASET_STORAGE_PATH", ".loopforge/datasets"),
             dataset_max_size_bytes=int(os.getenv("LOOPFORGE_DATASET_MAX_SIZE_BYTES", str(256 * 1024 * 1024))),
             secret_key=os.getenv("LOOPFORGE_SECRET_KEY", "loopforge-local-secret"),
-            llm_provider=os.getenv("LOOPFORGE_LLM_PROVIDER", LLMProviderMode.FAKE.value),
-            sandbox_provider=os.getenv("LOOPFORGE_SANDBOX_PROVIDER", SandboxProviderMode.FAKE.value),
+            llm_provider=os.getenv("LOOPFORGE_LLM_PROVIDER", LLMProviderMode.OPENAI_COMPATIBLE.value),
+            sandbox_provider=os.getenv("LOOPFORGE_SANDBOX_PROVIDER", SandboxProviderMode.DOCKER_GVISOR.value),
             openai_compatible_base_url=os.getenv("LOOPFORGE_OPENAI_COMPATIBLE_BASE_URL", "http://localhost:8000/v1"),
             openai_compatible_api_key=os.getenv("LOOPFORGE_OPENAI_COMPATIBLE_API_KEY", "local-dev-key"),
             openai_compatible_model=os.getenv("LOOPFORGE_OPENAI_COMPATIBLE_MODEL", "local-model"),

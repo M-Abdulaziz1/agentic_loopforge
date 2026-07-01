@@ -3,8 +3,6 @@ from __future__ import annotations
 from api.loopforge.domain import Goal, LLMProviderKind, StoredLLMProvider
 from api.loopforge.providers import (
     DockerGvisorSandboxProvider,
-    FakeLLMProvider,
-    FakeSandboxProvider,
     LLMProvider,
     LLMProviderError,
     OpenAICompatibleLLMProvider,
@@ -16,14 +14,14 @@ from api.loopforge.store import Store
 
 
 def create_llm_provider(settings: Settings) -> LLMProvider:
-    if settings.llm_provider == LLMProviderMode.OPENAI_COMPATIBLE:
-        return OpenAICompatibleLLMProvider(
-            base_url=settings.openai_compatible_base_url,
-            api_key=settings.openai_compatible_api_key,
-            model=settings.openai_compatible_model,
-            timeout_seconds=settings.openai_compatible_timeout_seconds,
-        )
-    return FakeLLMProvider()
+    if settings.llm_provider != LLMProviderMode.OPENAI_COMPATIBLE:
+        raise LLMProviderError(f"Unsupported LLM provider mode: {settings.llm_provider}")
+    return OpenAICompatibleLLMProvider(
+        base_url=settings.openai_compatible_base_url,
+        api_key=settings.openai_compatible_api_key,
+        model=settings.openai_compatible_model,
+        timeout_seconds=settings.openai_compatible_timeout_seconds,
+    )
 
 
 def create_llm_provider_from_config(config: StoredLLMProvider, settings: Settings) -> LLMProvider:
@@ -48,31 +46,17 @@ def create_llm_provider_for_goal(store: Store, settings: Settings, goal: Goal) -
 
 
 def create_sandbox_provider(settings: Settings) -> SandboxProvider:
-    if settings.sandbox_provider == SandboxProviderMode.DOCKER_GVISOR:
-        return DockerGvisorSandboxProvider(
-            runtime=settings.docker_gvisor_runtime,
-            image=settings.docker_sandbox_image,
-            workspace_root=settings.docker_workspace_root,
-            network=settings.docker_network,
-            memory=settings.docker_memory,
-            cpus=settings.docker_cpus,
-        )
-    return FakeSandboxProvider()
+    if settings.sandbox_provider != SandboxProviderMode.DOCKER_GVISOR:
+        raise LLMProviderError(f"Unsupported sandbox provider mode: {settings.sandbox_provider}")
+    return DockerGvisorSandboxProvider(
+        runtime=settings.docker_gvisor_runtime,
+        image=settings.docker_sandbox_image,
+        workspace_root=settings.docker_workspace_root,
+        network=settings.docker_network,
+        memory=settings.docker_memory,
+        cpus=settings.docker_cpus,
+    )
 
 
 def create_execution_sandbox_provider(settings: Settings, *, llm: LLMProvider, goal: Goal) -> SandboxProvider:
-    configured = create_sandbox_provider(settings)
-    if settings.sandbox_provider == SandboxProviderMode.DOCKER_GVISOR:
-        return configured
-    if bool(getattr(llm, "offline_stub", False)):
-        return configured
-    if goal.toggles.code_sandbox:
-        return DockerGvisorSandboxProvider(
-            runtime=settings.docker_gvisor_runtime,
-            image=settings.docker_sandbox_image,
-            workspace_root=settings.docker_workspace_root,
-            network=settings.docker_network,
-            memory=settings.docker_memory,
-            cpus=settings.docker_cpus,
-        )
-    return configured
+    return create_sandbox_provider(settings)

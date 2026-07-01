@@ -1,4 +1,6 @@
 import json
+import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -19,26 +21,40 @@ class SequenceLLM:
         return LLMResponse(text=self.responses.pop(0), tokens_used=7)
 
 
-class ScriptedSandbox:
-    """A real persistent workspace (so file I/O truly persists) with scripted code output."""
+class LocalSubprocessSandbox:
+    """Persistent test workspace that executes Python and returns actual stdout/stderr."""
 
-    def __init__(self, outputs: list[SandboxResult] | None = None) -> None:
-        self.outputs = list(outputs or [])
+    def __init__(self) -> None:
         self.ran: list[str] = []
 
     def run_code(self, code: str, *, timeout_seconds: int, dataset_mount=None) -> SandboxResult:
-        return SandboxResult(exit_code=0, stdout="", stderr="")
+        with tempfile.TemporaryDirectory(prefix="lf-test-run-") as tmp:
+            workspace = Path(tmp)
+            return self._execute(workspace, code, timeout_seconds)
 
     def open_session(self, *, dataset_mount=None) -> SandboxSession:
         root = Path(tempfile.mkdtemp(prefix="lf-test-"))
         (root / "data").mkdir(parents=True, exist_ok=True)
         (root / "output").mkdir(parents=True, exist_ok=True)
 
-        def exec_python(_ws: Path, code: str, _timeout: int) -> SandboxResult:
-            self.ran.append(code)
-            return self.outputs.pop(0) if self.outputs else SandboxResult(exit_code=0, stdout="ran", stderr="")
+        def exec_python(ws: Path, code: str, timeout: int) -> SandboxResult:
+            return self._execute(ws, code, timeout)
 
         return SandboxSession(workspace=root, exec_python=exec_python)
+
+    def _execute(self, workspace: Path, code: str, timeout: int) -> SandboxResult:
+        self.ran.append(code)
+        script = workspace / "main.py"
+        script.write_text(code, encoding="utf-8")
+        completed = subprocess.run(
+            [sys.executable, str(script)],
+            cwd=workspace,
+            timeout=timeout,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return SandboxResult(exit_code=completed.returncode, stdout=completed.stdout, stderr=completed.stderr)
 
 
 def _spec(goal_id: str, agents: list[LoopSpecAgent], success: list[str]) -> LoopSpec:
@@ -64,7 +80,7 @@ def test_agent_observes_real_execution_output_and_persists_grounded_artifacts() 
     spec = store.save_loop_spec(_spec(goal.id, [agent], ["Report answers the goal"]))
     llm = SequenceLLM(
         [
-            json.dumps({"thought": "profile", "tool": "run_python", "code": "import pandas as pd; print('rows', 100)"}),
+            json.dumps({"thought": "profile", "tool": "run_python", "code": "print('rows', 100)"}),
             json.dumps(
                 {
                     "thought": "done",
@@ -75,12 +91,12 @@ def test_agent_observes_real_execution_output_and_persists_grounded_artifacts() 
             ),
         ]
     )
-    sandbox = ScriptedSandbox([SandboxResult(exit_code=0, stdout="rows 100\n", stderr="")])
+    sandbox = LocalSubprocessSandbox()
 
     run = LoopRunner(store=store, llm=llm, sandbox=sandbox, tools=default_tool_registry()).start(goal, spec)
 
     assert run.status == "completed"
-    assert sandbox.ran and "pandas" in sandbox.ran[0]
+    assert sandbox.ran and "rows" in sandbox.ran[0]
     kinds = {a.kind for a in store.list_artifacts(run.id)}
     assert {"code", "report", "insight"} <= kinds
     assert "Allowed Python packages" in llm.calls[0][0]
@@ -104,7 +120,7 @@ def test_workspace_files_persist_between_steps() -> None:
         ]
     )
 
-    run = LoopRunner(store=store, llm=llm, sandbox=ScriptedSandbox(), tools=default_tool_registry()).start(goal, spec)
+    run = LoopRunner(store=store, llm=llm, sandbox=LocalSubprocessSandbox(), tools=default_tool_registry()).start(goal, spec)
 
     assert run.status == "completed"
     # Step 3's prompt shows the content written in step 1 and read in step 2 — real persistence.
@@ -123,7 +139,7 @@ def test_reading_missing_file_reports_not_found_instead_of_fabricating() -> None
         ]
     )
 
-    run = LoopRunner(store=store, llm=llm, sandbox=ScriptedSandbox(), tools=default_tool_registry()).start(goal, spec)
+    run = LoopRunner(store=store, llm=llm, sandbox=LocalSubprocessSandbox(), tools=default_tool_registry()).start(goal, spec)
 
     assert run.status == "completed"
     assert "File not found" in llm.calls[1][1]
@@ -147,7 +163,7 @@ def test_two_agents_share_workspace_and_validate_a_real_model() -> None:
         ]
     )
 
-    run = LoopRunner(store=store, llm=llm, sandbox=ScriptedSandbox(), tools=default_tool_registry()).start(goal, spec)
+    run = LoopRunner(store=store, llm=llm, sandbox=LocalSubprocessSandbox(), tools=default_tool_registry()).start(goal, spec)
 
     assert run.status == "completed"
     assert {e.payload.get("agent") for e in store.list_events(run.id) if e.type == "node_end"} == {"MLBuilder", "Verifier"}
@@ -161,12 +177,13 @@ def test_run_fails_when_real_llm_never_returns_a_valid_action() -> None:
     spec = store.save_loop_spec(_spec(goal.id, [agent], ["ok"]))
     llm = SequenceLLM(["I will train the model now.", "Still not JSON."])
 
-    run = LoopRunner(store=store, llm=llm, sandbox=ScriptedSandbox(), tools=default_tool_registry()).start(goal, spec)
+    run = LoopRunner(store=store, llm=llm, sandbox=LocalSubprocessSandbox(), tools=default_tool_registry()).start(goal, spec)
 
     assert run.status == "failed"
     assert run.result_summary == "Agent never returned a valid JSON action."
     assert store.list_artifacts(run.id) == []
     assert [event.type for event in store.list_events(run.id)][-1] == "run_status"
+
 
 class FailingOpenSandbox:
     def __init__(self, message: str) -> None:
@@ -203,13 +220,13 @@ def test_run_fails_clearly_when_required_package_is_missing() -> None:
     goal = store.save_goal(Goal(text="Train a fraud model", autonomy="autonomous"))
     agent = LoopSpecAgent(name="Trainer", role="train", system_prompt="Train.", tools=["code_sandbox"])
     spec = store.save_loop_spec(_spec(goal.id, [agent], ["ok"]))
-    llm = SequenceLLM([json.dumps({"thought": "train", "tool": "run_python", "code": "import pandas as pd"})])
-    sandbox = ScriptedSandbox([SandboxResult(exit_code=1, stdout="", stderr="ModuleNotFoundError: No module named 'pandas'")])
+    llm = SequenceLLM([json.dumps({"thought": "train", "tool": "run_python", "code": "import definitely_missing_loopforge_pkg"})])
+    sandbox = LocalSubprocessSandbox()
 
     run = LoopRunner(store=store, llm=llm, sandbox=sandbox, tools=default_tool_registry()).start(goal, spec)
 
     assert run.status == "failed"
-    assert "Sandbox Python environment is missing package 'pandas'" in (run.result_summary or "")
+    assert "Sandbox Python environment is missing package 'definitely_missing_loopforge_pkg'" in (run.result_summary or "")
     events = store.list_events(run.id)
     assert events[-1].type == "run_status"
-    assert store.list_artifacts(run.id)[0].metadata["stderr"] == "ModuleNotFoundError: No module named 'pandas'"
+    assert "ModuleNotFoundError" in store.list_artifacts(run.id)[0].metadata["stderr"]

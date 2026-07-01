@@ -16,10 +16,10 @@ Run the API locally:
 ./.venv/bin/python -m uvicorn api.loopforge.app:app --reload
 ```
 
-By default, the importable ASGI app stores state in SQLite at `.loopforge/loopforge.db`
-and uses deterministic fake LLM/sandbox providers for offline development.
+By default, the importable ASGI app stores state in SQLite at `.loopforge/loopforge.db`,
+uses an OpenAI-compatible LLM endpoint, and executes generated code through Docker plus gVisor.
 
-Use a local or cloud OpenAI-compatible LLM endpoint:
+Configure a local or cloud OpenAI-compatible LLM endpoint:
 
 ```bash
 LOOPFORGE_LLM_PROVIDER=openai_compatible

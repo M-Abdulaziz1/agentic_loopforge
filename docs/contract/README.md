@@ -61,8 +61,7 @@ uses `pyproject.toml`; create/activate a venv in this worktree (`python -m venv 
   `ToolPermission`, `RunStatus`, …). The contract schemas mirror these — extend these
   models if a field is missing rather than creating parallel types.
 - `api/loopforge/app.py` — FastAPI app with `POST /api/goals`,
-  `POST /api/loop-specs/{id}/approve`, etc. Currently an in-memory `InMemoryStore` and
-  `FakeLLMProvider`/`FakeSandboxProvider`.
+  `POST /api/loop-specs/{id}/approve`, etc. The runtime uses configured OpenAI-compatible LLM providers and Docker/gVisor sandbox execution.
 - `api/loopforge/planner.py` — `LoopPlanner` (clarity check, spec generation).
 - `api/loopforge/store.py` — `InMemoryStore`.
 

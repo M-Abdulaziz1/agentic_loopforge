@@ -90,12 +90,8 @@ class AgentLoop:
         self.session = session
         self.hooks = hooks
         self.max_turns = max(1, max_turns)
-        self._offline = bool(getattr(llm, "offline_stub", False))
 
     def run(self, *, agent, goal_text: str, success_criteria: list[str], dataset_note: str, prior_note: str) -> LoopResult:
-        if self._offline:
-            return self._run_offline(agent, dataset_note)
-
         system = f"{agent.system_prompt}\n\n{TOOL_PROTOCOL}"
         header = _header(goal_text, success_criteria, dataset_note, prior_note)
         transcript: list[str] = []
@@ -193,23 +189,6 @@ class AgentLoop:
             return "\n".join(entries) if entries else "(empty)"
         return f"Unknown tool {tool!r}. Use run_python, write_file, read_file, list_dir, or finish."
 
-    def _run_offline(self, agent, dataset_note: str) -> LoopResult:
-        # No real LLM available. Consult the stub once so the run is honest about
-        # having tried, then finish empty — never fabricate work or results.
-        result = LoopResult()
-        if not self.hooks.consume_step():
-            result.budget_exhausted = True
-            return result
-        response = self.llm.complete(system=agent.system_prompt, prompt=f"<goal>{dataset_note}</goal>")
-        self.hooks.count_llm_call(response.tokens_used)
-        self.hooks.emit(
-            "llm_call",
-            f"{agent.name} consulted the offline stub (no real work produced)",
-            {"agent": agent.name, "tokens": response.tokens_used, "turn": 1},
-        )
-        result.finished = True
-        result.summary = ""  # honest empty: the stub cannot do real analysis
-        return result
 
 
 def _header(goal_text: str, success_criteria: list[str], dataset_note: str, prior_note: str) -> str:

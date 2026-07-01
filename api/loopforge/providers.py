@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 import shutil
 import subprocess
@@ -76,17 +76,6 @@ class OpenAICompatibleLLMProvider:
         if not isinstance(tokens, int):
             tokens = estimate_tokens(system) + estimate_tokens(prompt) + estimate_tokens(text)
         return LLMResponse(text=text, tokens_used=tokens)
-
-
-class FakeLLMProvider:
-    # Offline/no-LLM stub. The planner only falls back to deterministic clarity/spec
-    # output when the provider is flagged offline; any REAL provider that returns
-    # invalid output raises instead of producing a fake loop.
-    offline_stub = True
-
-    def complete(self, *, system: str, prompt: str) -> LLMResponse:
-        text = f"FAKE_RESPONSE system={system} prompt={prompt[:80]}"
-        return LLMResponse(text=text, tokens_used=estimate_tokens(system) + estimate_tokens(prompt))
 
 
 @dataclass(frozen=True)
@@ -264,30 +253,6 @@ class DockerGvisorSandboxProvider:
             text=True,
             check=False,
         )
-
-
-@dataclass
-class FakeSandboxProvider:
-    executions: list[str] = field(default_factory=list)
-    workspace_root: str | Path | None = None
-
-    def run_code(self, code: str, *, timeout_seconds: int, dataset_mount: DatasetMount | dict[str, object] | None = None) -> SandboxResult:
-        self.executions.append(code)
-        return SandboxResult(exit_code=0, stdout="sandbox execution simulated")
-
-    def open_session(self, *, dataset_mount: DatasetMount | dict[str, object] | None = None) -> SandboxSession:
-        import tempfile
-
-        root = Path(self.workspace_root) if self.workspace_root else Path(tempfile.mkdtemp(prefix="loopforge-fake-"))
-        workspace = root / uuid4().hex
-        (workspace / "data").mkdir(parents=True, exist_ok=True)
-        (workspace / "output").mkdir(parents=True, exist_ok=True)
-
-        def exec_python(_ws: Path, code: str, _timeout: int) -> SandboxResult:
-            self.executions.append(code)
-            return SandboxResult(exit_code=0, stdout="sandbox execution simulated")
-
-        return SandboxSession(workspace=workspace, exec_python=exec_python)
 
 
 def _normalize_dataset_mount(mount: DatasetMount | dict[str, object] | None) -> DatasetMount | None:

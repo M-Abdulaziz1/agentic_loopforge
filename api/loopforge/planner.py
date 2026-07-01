@@ -13,7 +13,6 @@ from api.loopforge.domain import (
     Goal,
     GoalMode,
     LoopSpec,
-    LoopSpecAgent,
     RunStatus,
     StoredDataset,
     ToolPermission,
@@ -71,8 +70,6 @@ class LoopPlanner:
                 )
             return ClarityResult(status=RunStatus.PENDING_APPROVAL)
         except (ValueError, TypeError, KeyError) as exc:
-            if getattr(self.llm, "offline_stub", False):
-                return self._heuristic_clarity(goal)
             raise PlannerError(
                 "The LLM did not return a valid clarity assessment. Check the LLM provider."
             ) from exc
@@ -90,8 +87,6 @@ class LoopPlanner:
             try:
                 return self._spec_from_json(goal, retry.text)
             except (ValueError, ValidationError, TypeError, KeyError) as exc:
-                if getattr(self.llm, "offline_stub", False):
-                    return self._fallback_spec(goal, dataset)
                 raise PlannerError(
                     "The LLM did not return a valid loop spec after a retry. Check the LLM provider."
                 ) from exc
@@ -112,56 +107,6 @@ class LoopPlanner:
         data.setdefault("improvement_strategy", "Revise within budget if the evaluator rejects the candidate.")
         return LoopSpec(**data)
 
-    def _heuristic_clarity(self, goal: Goal) -> ClarityResult:
-        missing = self._missing_requirements(goal.text)
-        if missing:
-            questions = [
-                ClarificationQuestion(
-                    question="What specific outcome should the loop produce?",
-                    missing_requirement=missing[0],
-                    options=[
-                        "Validated statistical insights",
-                        "A baseline-beating predictive model",
-                        "A written report of findings",
-                    ],
-                )
-            ]
-            return ClarityResult(status=RunStatus.NEEDS_CLARIFICATION, session=ClarificationSession(goal_id=goal.id, questions=questions, missing_requirements=missing, clarity_score=0.35))
-        return ClarityResult(status=RunStatus.PENDING_APPROVAL)
-
-    def _fallback_spec(self, goal: Goal, dataset: StoredDataset | None) -> LoopSpec:
-        permissions = [
-            ToolPermission(tool_name="local_workspace", enabled=True, reason="Store run artifacts"),
-            ToolPermission(tool_name="code_sandbox", enabled=goal.toggles.code_sandbox, reason="Run generated code safely"),
-        ]
-        if goal.mode == GoalMode.ONLINE_ENABLED and goal.toggles.internet:
-            permissions.append(ToolPermission(tool_name="web_search", enabled=True, reason="Internet toggle enabled"))
-        else:
-            permissions.append(ToolPermission(tool_name="web_search", enabled=False, reason="Internet disabled for this goal"))
-        allowed_tools = [permission.tool_name for permission in permissions if permission.enabled]
-        return LoopSpec(
-            goal_id=goal.id,
-            version=1,
-            agents=[
-                LoopSpecAgent(name="Loop Planner", role="Maintain the plan, validate progress, and coordinate agents.", system_prompt="You break the approved goal into the smallest ordered set of executable steps, keep the run within its constraints and budget, and decide when to finalize. You touch no data directly; you only plan and coordinate.", tools=["local_workspace"]),
-                LoopSpecAgent(name="Executor", role="Use approved tools to produce artifacts that satisfy the goal.", system_prompt="You carry out one planned step at a time using only your approved tools and the read-only dataset at /workspace/data. You return self-contained code or a result, and you report blockers honestly instead of guessing.", tools=allowed_tools),
-                LoopSpecAgent(name="Reviewer", role="Check whether the output satisfies the success criteria.", system_prompt="You compare the produced output against the success and failure criteria, judge whether it genuinely passes, and recommend either improve (with the specific weakness) or finalize. You never approve unvalidated claims.", tools=["local_workspace"]),
-            ],
-            tool_permissions=permissions,
-            handoffs=[{"from": "Loop Planner", "to": "Executor", "condition": "plan ready"}, {"from": "Executor", "to": "Reviewer", "condition": "artifact produced"}],
-            success_criteria=[f"Produce a result that directly satisfies: {goal.text}"],
-            failure_criteria=["Required permission is missing", "Goal cannot be achieved within budget"],
-            gates=list(_AUTONOMY_GATES[goal.autonomy]),
-            context_policy={"max_context_tokens": goal.budget.max_context_tokens, "dataset_id": goal.dataset_id},
-            improvement_strategy="If review fails, revise the plan once within budget and retry the weakest step.",
-        )
-
-    def _missing_requirements(self, text: str) -> list[str]:
-        normalized = text.strip().lower()
-        vague_phrases = {"make it better", "help me", "do the thing", "improve this"}
-        if normalized in vague_phrases or len(normalized.split()) < 6:
-            return ["desired outcome", "success criteria"]
-        return []
 
 
 CLARITY_SYSTEM = (

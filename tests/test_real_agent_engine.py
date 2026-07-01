@@ -1,11 +1,15 @@
 import json
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from api.loopforge.app import create_app
 from api.loopforge.domain import Goal, GoalToggles
 from api.loopforge.planner import LoopPlanner
-from api.loopforge.providers import FakeSandboxProvider, LLMResponse, SandboxResult
+from api.loopforge.providers import LLMResponse, SandboxResult, SandboxSession
 from api.loopforge.runner import LoopRunner
 from api.loopforge.store import InMemoryStore
 from api.loopforge.tools import default_tool_registry
@@ -21,13 +25,38 @@ class SequenceLLM:
         return LLMResponse(text=self.responses.pop(0), tokens_used=7)
 
 
-class RecordingSandbox:
+class LocalSubprocessSandbox:
     def __init__(self) -> None:
         self.calls: list[tuple[str, object]] = []
 
     def run_code(self, code: str, *, timeout_seconds: int, dataset_mount=None) -> SandboxResult:
+        with tempfile.TemporaryDirectory(prefix="lf-real-engine-run-") as tmp:
+            workspace = Path(tmp)
+            return self._execute(workspace, code, timeout_seconds, dataset_mount)
+
+    def open_session(self, *, dataset_mount=None) -> SandboxSession:
+        workspace = Path(tempfile.mkdtemp(prefix="lf-real-engine-"))
+        (workspace / "data").mkdir(parents=True, exist_ok=True)
+        (workspace / "output").mkdir(parents=True, exist_ok=True)
+
+        def exec_python(ws: Path, code: str, timeout: int) -> SandboxResult:
+            return self._execute(ws, code, timeout, dataset_mount)
+
+        return SandboxSession(workspace=workspace, exec_python=exec_python)
+
+    def _execute(self, workspace: Path, code: str, timeout: int, dataset_mount=None) -> SandboxResult:
         self.calls.append((code, dataset_mount))
-        return SandboxResult(exit_code=0, stdout="sandbox ok", stderr="")
+        script = workspace / "main.py"
+        script.write_text(code, encoding="utf-8")
+        completed = subprocess.run(
+            [sys.executable, str(script)],
+            cwd=workspace,
+            timeout=timeout,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return SandboxResult(exit_code=completed.returncode, stdout=completed.stdout, stderr=completed.stderr)
 
 
 def spec_json(agent_name: str = "Data Analyst") -> str:
@@ -109,14 +138,14 @@ def test_runner_executes_llm_agent_json_in_sandbox_and_persists_artifacts() -> N
             ),
         ]
     )
-    sandbox = FakeSandboxProvider()
+    sandbox = LocalSubprocessSandbox()
     runner = LoopRunner(store=store, llm=llm, sandbox=sandbox, tools=default_tool_registry())
 
     run = runner.start(goal, spec)
     artifacts = store.list_artifacts(run.id)
 
     assert run.status == "completed"
-    assert sandbox.executions == ["print('analysis complete')"]
+    assert sandbox.calls and sandbox.calls[0][0] == "print('analysis complete')"
     assert {artifact.kind for artifact in artifacts} == {"code", "report", "insight"}
     assert [artifact.metadata.get("passed") for artifact in artifacts if artifact.kind == "insight"] == [True]
 
@@ -151,7 +180,7 @@ def test_runner_honest_empty_when_evaluator_rejects_candidate() -> None:
         ]
     )
 
-    run = LoopRunner(store=store, llm=llm, sandbox=FakeSandboxProvider(), tools=default_tool_registry()).start(goal, spec)
+    run = LoopRunner(store=store, llm=llm, sandbox=LocalSubprocessSandbox(), tools=default_tool_registry()).start(goal, spec)
     kinds = {a.kind for a in store.list_artifacts(run.id)}
 
     assert run.status == "completed"

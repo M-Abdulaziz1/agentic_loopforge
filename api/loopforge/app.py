@@ -707,7 +707,7 @@ def _llm_for_goal(store: Store, settings: Settings, goal: Goal):
 
 
 def _planner_http_error(exc: Exception, settings: Settings) -> HTTPException:
-    # 502: the upstream LLM failed or returned unusable output. Never a fake loop.
+    # 502: the upstream LLM failed or returned unusable output. Never fabricate a loop.
     detail = _sanitize_provider_detail(str(exc), None, settings)
     return HTTPException(status_code=502, detail=detail or "The LLM provider failed to produce a valid result.")
 

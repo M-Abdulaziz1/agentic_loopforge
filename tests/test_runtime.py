@@ -1,20 +1,14 @@
-from api.loopforge.providers import (
-    DockerGvisorSandboxProvider,
-    FakeLLMProvider,
-    FakeSandboxProvider,
-    LLMResponse,
-    OpenAICompatibleLLMProvider,
-)
+from api.loopforge.providers import DockerGvisorSandboxProvider, OpenAICompatibleLLMProvider
 from api.loopforge.domain import Goal
 from api.loopforge.runtime import create_execution_sandbox_provider, create_llm_provider, create_sandbox_provider
 from api.loopforge.settings import LLMProviderMode, SandboxProviderMode, Settings
 
 
-def test_runtime_creates_fake_providers_by_default() -> None:
+def test_runtime_creates_real_providers_by_default() -> None:
     settings = Settings()
 
-    assert isinstance(create_llm_provider(settings), FakeLLMProvider)
-    assert isinstance(create_sandbox_provider(settings), FakeSandboxProvider)
+    assert isinstance(create_llm_provider(settings), OpenAICompatibleLLMProvider)
+    assert isinstance(create_sandbox_provider(settings), DockerGvisorSandboxProvider)
 
 
 def test_runtime_creates_openai_compatible_llm_provider() -> None:
@@ -53,24 +47,13 @@ def test_runtime_creates_docker_gvisor_sandbox_provider(tmp_path) -> None:
     assert provider.memory == "256m"
     assert provider.cpus == "0.5"
 
-def test_runtime_promotes_real_llm_code_runs_to_gvisor_sandbox(tmp_path) -> None:
-    class RealLLMProvider:
-        def complete(self, *, system: str, prompt: str) -> LLMResponse:
-            return LLMResponse(text="{}", tokens_used=1)
 
-    settings = Settings(sandbox_provider=SandboxProviderMode.FAKE, docker_workspace_root=str(tmp_path))
+def test_execution_sandbox_provider_is_always_gvisor_for_code_runs(tmp_path) -> None:
+    settings = Settings(sandbox_provider=SandboxProviderMode.DOCKER_GVISOR, docker_workspace_root=str(tmp_path))
+    llm = create_llm_provider(settings)
     goal = Goal(text="Train a local fraud model")
 
-    provider = create_execution_sandbox_provider(settings, llm=RealLLMProvider(), goal=goal)
+    provider = create_execution_sandbox_provider(settings, llm=llm, goal=goal)
 
     assert isinstance(provider, DockerGvisorSandboxProvider)
     assert provider.workspace_root == tmp_path
-
-
-def test_runtime_keeps_fake_sandbox_for_offline_stub_runs() -> None:
-    settings = Settings(sandbox_provider=SandboxProviderMode.FAKE)
-    goal = Goal(text="Draft an offline plan")
-
-    provider = create_execution_sandbox_provider(settings, llm=FakeLLMProvider(), goal=goal)
-
-    assert isinstance(provider, FakeSandboxProvider)
