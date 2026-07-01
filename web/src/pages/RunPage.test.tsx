@@ -25,6 +25,6 @@ test("shows live status and the step meter", async () => {
 test("the Events tab lists run events", async () => {
   renderRun();
   await screen.findByTestId("run-status");
-  await userEvent.click(screen.getByRole("button", { name: "events" }));
+  await userEvent.click(screen.getByRole("button", { name: "Events" }));
   expect(await screen.findByText("Entered planner")).toBeInTheDocument();
 });

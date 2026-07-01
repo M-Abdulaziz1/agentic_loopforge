@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-type RunTab = "canvas" | "timeline" | "events";
+type RunTab = "canvas" | "events";
 
 type UiState = {
   selectedAgentId: string | null;

@@ -11,5 +11,9 @@ test("renders the sidebar brand", () => {
       </MemoryRouter>
     </Providers>,
   );
-  expect(screen.getByText("LoopForge")).toBeInTheDocument();
+  // Wordmark renders "Loop" + a gradient "Forge" across two nodes.
+  expect(
+    screen.getByText((_content, el) => el?.textContent === "LoopForge" && el.tagName === "DIV"),
+  ).toBeInTheDocument();
+  expect(screen.getByText("Guarded autonomy")).toBeInTheDocument();
 });

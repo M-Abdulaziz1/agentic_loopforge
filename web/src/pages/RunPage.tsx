@@ -7,11 +7,14 @@ import { useGoal } from "../lib/api/goals";
 import { useGates, useDecideGate } from "../lib/api/gates";
 import { reduceRunEvents } from "../lib/runEvents";
 import { MeterBar } from "../components/ui/MeterBar";
-import { AgentCanvas } from "../components/run/AgentCanvas";
+import { AgentPipeline } from "../components/run/AgentPipeline";
 import { Inspector } from "../components/run/Inspector";
 import type { RunEvent, RunEventType } from "../lib/api/types";
 
-const TABS = ["canvas", "timeline", "events"] as const;
+const TABS = [
+  { id: "canvas", label: "Pipeline" },
+  { id: "events", label: "Events" },
+] as const;
 
 export function RunPage() {
   const { runId = "" } = useParams();
@@ -88,17 +91,17 @@ export function RunPage() {
         <div className="ml-auto flex gap-1 rounded-xl border border-[var(--line)] bg-[var(--glass)] p-1">
           {TABS.map((t) => (
             <button
-              key={t}
+              key={t.id}
               type="button"
-              onClick={() => setTab(t)}
+              onClick={() => setTab(t.id)}
               className={cn(
-                "rounded-lg px-4 py-1.5 text-[12.5px] font-semibold capitalize",
-                tab === t
-                  ? "bg-gradient-to-br from-[rgba(138,108,255,.4)] to-[rgba(74,214,255,.3)] text-white"
+                "rounded-lg px-4 py-1.5 text-[12.5px] font-semibold transition",
+                tab === t.id
+                  ? "bg-gradient-to-br from-[rgba(138,108,255,.4)] to-[rgba(74,214,255,.3)] text-white shadow-[0_4px_14px_rgba(138,108,255,.3)]"
                   : "text-mut hover:text-ink",
               )}
             >
-              {t}
+              {t.label}
             </button>
           ))}
         </div>
@@ -113,9 +116,8 @@ export function RunPage() {
             </div>
           ) : tab === "canvas" ? (
             spec ? (
-              <AgentCanvas
+              <AgentPipeline
                 agents={spec.agents}
-                handoffs={spec.handoffs}
                 view={view}
                 selectedId={selectedAgentId}
                 onSelect={setSelectedAgent}

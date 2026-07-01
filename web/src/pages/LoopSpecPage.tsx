@@ -19,13 +19,14 @@ export function LoopSpecPage() {
 
   const denied = spec.tool_permissions.filter((p) => !p.enabled);
   const isApproved = spec.status === "approved";
+  const loopSpecId = spec.id;
 
   async function approveSpec() {
     await approve.mutateAsync();
   }
 
   async function startRunNow() {
-    const run = await startRun.mutateAsync(spec.id);
+    const run = await startRun.mutateAsync(loopSpecId);
     navigate(`/runs/${run.id}`);
   }
 
