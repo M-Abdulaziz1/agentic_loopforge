@@ -12,7 +12,7 @@ import { Inspector } from "../components/run/Inspector";
 import type { RunEvent, RunEventType } from "../lib/api/types";
 
 const TABS = [
-  { id: "canvas", label: "Pipeline" },
+  { id: "canvas", label: "Agents" },
   { id: "events", label: "Events" },
 ] as const;
 
