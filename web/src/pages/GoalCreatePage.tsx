@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { GlassCard } from "../components/ui/GlassCard";
 import { Toggle } from "../components/ui/Toggle";
 import { AutonomySlider } from "../components/ui/AutonomySlider";
+import { Button } from "../components/ui/Button";
+import { Input, Select, Textarea } from "../components/ui/Field";
 import { cn } from "../lib/cn";
 import { lockTogglesForMode } from "../lib/capabilities";
 import { DEFAULT_AUTONOMY } from "../lib/autonomy";
@@ -106,27 +108,27 @@ export function GoalCreatePage() {
       </div>
       <div className="flex flex-1 justify-center overflow-auto px-7 pb-28 pt-8">
         <div className="w-full max-w-[760px]">
-          <h1 className="text-[26px] font-extrabold tracking-tight">Define a new goal</h1>
+          <h1 className="font-display text-[32px] leading-none">Define a new goal</h1>
           <p className="mb-6 mt-1.5 text-sm text-mut">
             Describe the end result you want. LoopForge checks if it's clear enough to build a
             loop — and asks focused questions if not.
           </p>
 
           <GlassCard className="mb-[18px]">
-            <div className="mb-3.5 text-[11px] font-bold uppercase tracking-wide text-mut">
+            <div className="mb-3.5 text-[11px] font-semibold uppercase tracking-[.88px] text-mut">
               Your goal
             </div>
-            <textarea
+            <Textarea
               aria-label="Goal"
               value={text}
               onChange={(e) => setText(e.target.value)}
               placeholder="e.g. Find the main drivers of customer churn in the Q2 dataset and validate them statistically."
-              className="min-h-[120px] w-full resize-y rounded-xl border border-[var(--line2)] bg-white/[0.03] p-4 text-[15px] leading-relaxed text-ink outline-none focus:border-[#cdbcff]"
+              className="min-h-[120px] text-[15px]"
             />
           </GlassCard>
 
           <GlassCard className="mb-[18px]">
-            <div className="mb-3.5 text-[11px] font-bold uppercase tracking-wide text-mut">
+            <div className="mb-3.5 text-[11px] font-semibold uppercase tracking-[.88px] text-mut">
               Runtime mode
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -139,8 +141,8 @@ export function GoalCreatePage() {
                   className={cn(
                     "rounded-2xl border p-4 text-left transition",
                     mode === m.value
-                      ? "border-[#cdbcff] bg-gradient-to-br from-[rgba(138,108,255,.2)] to-[rgba(74,214,255,.1)]"
-                      : "border-[var(--line2)] hover:border-[rgba(205,188,255,.5)]",
+                      ? "border-[var(--violet)] bg-[color-mix(in_srgb,var(--violet)_10%,var(--surface))]"
+                      : "border-[var(--line2)] hover:border-[var(--violet)]",
                   )}
                 >
                   <div className="flex items-center gap-2.5 font-bold">
@@ -156,7 +158,7 @@ export function GoalCreatePage() {
           </GlassCard>
 
           <GlassCard className="mb-[18px]">
-            <div className="mb-1 text-[11px] font-bold uppercase tracking-wide text-mut">
+            <div className="mb-1 text-[11px] font-semibold uppercase tracking-[.88px] text-mut">
               Autonomy
             </div>
             <p className="mb-4 text-[12.5px] text-mut">
@@ -167,7 +169,7 @@ export function GoalCreatePage() {
           </GlassCard>
 
           <GlassCard className="mb-[18px]">
-            <div className="mb-3.5 text-[11px] font-bold uppercase tracking-wide text-mut">
+            <div className="mb-3.5 text-[11px] font-semibold uppercase tracking-[.88px] text-mut">
               Capabilities
             </div>
             <CapRow
@@ -197,7 +199,7 @@ export function GoalCreatePage() {
           </GlassCard>
 
           <GlassCard>
-            <div className="mb-3.5 text-[11px] font-bold uppercase tracking-wide text-mut">
+            <div className="mb-3.5 text-[11px] font-semibold uppercase tracking-[.88px] text-mut">
               Budget caps{" "}
               <span className="font-normal normal-case tracking-normal">
                 — hard kill switch; the loop stops when any cap is hit
@@ -224,24 +226,23 @@ export function GoalCreatePage() {
           </GlassCard>
 
           <GlassCard className="mt-[18px]">
-            <div className="mb-3.5 text-[11px] font-bold uppercase tracking-wide text-mut">
+            <div className="mb-3.5 text-[11px] font-semibold uppercase tracking-[.88px] text-mut">
               Dataset
             </div>
-            <select
+            <Select
               aria-label="Dataset"
               value={datasetId}
               onChange={(e) => setDatasetId(e.target.value)}
-              className="w-full rounded-xl border border-[var(--line2)] bg-white/[0.03] px-3.5 py-2.5 text-[14px] text-ink outline-none focus:border-[#cdbcff]"
             >
-              <option value="" className="bg-bg0">
+              <option value="" className="bg-surface text-ink">
                 None (DB only)
               </option>
               {selectableDatasets.map((d) => (
-                <option key={d.id} value={d.id} className="bg-bg0">
+                <option key={d.id} value={d.id} className="bg-surface text-ink">
                   {d.name} · {d.kind}
                 </option>
               ))}
-            </select>
+            </Select>
             {datasetId ? (
               <div className="mt-2 text-[12.5px] text-mut">
                 Using {selectableDatasets.find((d) => d.id === datasetId)?.name ?? "uploaded dataset"}.
@@ -257,33 +258,35 @@ export function GoalCreatePage() {
                   onChange={(e) => setDatasetFile(e.target.files?.[0] ?? null)}
                   className="w-full text-[12px] text-ink2 file:mr-3 file:rounded-lg file:border-0 file:bg-[var(--glass2)] file:px-3 file:py-1.5 file:text-[12px] file:font-semibold file:text-ink"
                 />
-                <input
+                <Input
                   type="text"
                   aria-label="Dataset display name"
                   value={datasetName}
                   placeholder={datasetFile?.name ?? "Display name (optional)"}
                   onChange={(e) => setDatasetName(e.target.value)}
-                  className="mt-2 w-full rounded-lg border border-[var(--line2)] bg-white/[0.03] px-3 py-2 text-[13px] text-ink outline-none focus:border-[#cdbcff]"
+                  className="mt-2 h-10 text-[13px]"
                 />
               </div>
-              <button
-                type="button"
+              <Button
+                variant="secondary"
+                size="sm"
+                className="self-start"
                 onClick={uploadAndUseDataset}
-                disabled={!datasetFile || uploadDataset.isPending}
-                className="h-[38px] self-start rounded-xl bg-gradient-to-br from-violet to-teal px-4 text-[13px] font-bold text-white disabled:opacity-50"
+                disabled={!datasetFile}
+                loading={uploadDataset.isPending}
               >
-                {uploadDataset.isPending ? "Uploading…" : "Upload & use dataset"}
-              </button>
+                {uploadDataset.isPending ? "Uploading…" : "Upload & use"}
+              </Button>
             </div>
             {uploadDataset.isError ? (
-              <div className="mt-3 rounded-lg bg-[rgba(255,107,154,.12)] px-3 py-1.5 text-[12px] text-[#ffd0e0]">
+              <div className="mt-3 rounded-lg bg-[color-mix(in_srgb,var(--bad)_11%,var(--surface))] px-3 py-1.5 text-[12px] text-bad">
                 {datasetUploadErrorMessage(uploadDataset.error)}
               </div>
             ) : null}
           </GlassCard>
 
           <GlassCard className="mt-[18px]">
-            <div className="mb-3.5 text-[11px] font-bold uppercase tracking-wide text-mut">
+            <div className="mb-3.5 text-[11px] font-semibold uppercase tracking-[.88px] text-mut">
               Success metric (evaluator)
             </div>
             {evaluators.length === 0 ? (
@@ -292,26 +295,25 @@ export function GoalCreatePage() {
                 under <b>Evaluators</b> to optimize a custom metric.
               </p>
             ) : (
-              <select
+              <Select
                 aria-label="Evaluator"
                 value={evaluatorId}
                 onChange={(e) => setEvaluatorId(e.target.value)}
-                className="w-full rounded-xl border border-[var(--line2)] bg-white/[0.03] px-3.5 py-2.5 text-[14px] text-ink outline-none focus:border-[#cdbcff]"
               >
-                <option value="" className="bg-bg0">
+                <option value="" className="bg-surface text-ink">
                   Default evaluator
                 </option>
                 {evaluators.map((ev) => (
-                  <option key={ev.id} value={ev.id} className="bg-bg0">
+                  <option key={ev.id} value={ev.id} className="bg-surface text-ink">
                     {ev.name} · {ev.kind}
                   </option>
                 ))}
-              </select>
+              </Select>
             )}
           </GlassCard>
 
           <GlassCard className="mt-[18px]">
-            <div className="mb-3.5 text-[11px] font-bold uppercase tracking-wide text-mut">
+            <div className="mb-3.5 text-[11px] font-semibold uppercase tracking-[.88px] text-mut">
               LLM provider
             </div>
             {providers.length === 0 ? (
@@ -319,29 +321,28 @@ export function GoalCreatePage() {
                 No providers configured — runs use the env default. Add one in <b>Settings</b>.
               </p>
             ) : (
-              <select
+              <Select
                 aria-label="LLM provider"
                 value={providerId}
                 onChange={(e) => setProviderId(e.target.value)}
-                className="w-full rounded-xl border border-[var(--line2)] bg-white/[0.03] px-3.5 py-2.5 text-[14px] text-ink outline-none focus:border-[#cdbcff]"
               >
-                <option value="" className="bg-bg0">
+                <option value="" className="bg-surface text-ink">
                   Default provider
                 </option>
                 {providers.map((p) => (
-                  <option key={p.id} value={p.id} className="bg-bg0">
+                  <option key={p.id} value={p.id} className="bg-surface text-ink">
                     {p.name} · {p.model}
                   </option>
                 ))}
-              </select>
+              </Select>
             )}
           </GlassCard>
         </div>
       </div>
 
-      <div className="fixed bottom-0 left-[250px] right-0 flex items-center gap-3 border-t border-[var(--line)] bg-[rgba(8,8,26,.92)] px-7 py-4 backdrop-blur">
+      <div className="fixed bottom-0 left-[250px] right-0 flex items-center gap-3 border-t border-[var(--line)] bg-[color-mix(in_srgb,var(--bg0)_92%,transparent)] px-7 py-4 backdrop-blur-md">
         {createGoal.isError ? (
-          <div className="max-w-[60%] rounded-lg bg-[rgba(255,107,154,.14)] px-3 py-1.5 text-[12.5px] text-[#ffd0e0]">
+          <div className="max-w-[60%] rounded-lg bg-[color-mix(in_srgb,var(--bad)_12%,var(--surface))] px-3 py-1.5 text-[12.5px] text-bad">
             {goalCreateErrorMessage(createGoal.error)}
           </div>
         ) : (
@@ -350,21 +351,16 @@ export function GoalCreatePage() {
           </div>
         )}
         <div className="flex-1" />
-        <button
-          type="button"
-          onClick={() => navigate("/goals")}
-          className="rounded-xl border border-[var(--line2)] bg-[var(--glass2)] px-[18px] py-2.5 text-sm font-semibold"
-        >
+        <Button variant="ghost" onClick={() => navigate("/goals")}>
           Cancel
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
           onClick={submit}
-          disabled={text.trim().length < 3 || createGoal.isPending || uploadDataset.isPending}
-          className="rounded-xl bg-gradient-to-br from-violet to-teal px-[22px] py-2.5 text-sm font-bold text-white shadow-[0_8px_24px_rgba(138,108,255,.35)] disabled:opacity-50"
+          disabled={text.trim().length < 3 || uploadDataset.isPending}
+          loading={createGoal.isPending}
         >
           {createGoal.isPending ? "Checking…" : "Create & check clarity →"}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -415,7 +411,7 @@ function BudgetField(props: {
         step={props.step ?? 1}
         min={0}
         onChange={(e) => props.onChange(Number(e.target.value))}
-        className="mt-1.5 w-full bg-transparent text-2xl font-extrabold text-ink outline-none"
+        className="mt-1.5 w-full bg-transparent font-display text-[30px] text-ink outline-none"
       />
     </div>
   );

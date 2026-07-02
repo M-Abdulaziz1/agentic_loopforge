@@ -7,6 +7,7 @@ import { useGoal } from "../lib/api/goals";
 import { useGates, useDecideGate } from "../lib/api/gates";
 import { reduceRunEvents } from "../lib/runEvents";
 import { MeterBar } from "../components/ui/MeterBar";
+import { Button } from "../components/ui/Button";
 import { AgentPipeline } from "../components/run/AgentPipeline";
 import { Inspector } from "../components/run/Inspector";
 import type { RunEvent, RunEventType } from "../lib/api/types";
@@ -64,7 +65,7 @@ export function RunPage() {
       </div>
 
       {/* meter rail + tabs */}
-      <div className="flex items-center gap-6 border-b border-[var(--line)] bg-white/[0.015] px-6 py-3">
+      <div className="flex items-center gap-6 border-b border-[var(--line)] bg-[var(--canvas-soft)] px-6 py-3">
         <MeterBar
           label="STEPS"
           value={`${run.spent_steps} / ${budget?.max_steps ?? "–"}`}
@@ -88,16 +89,16 @@ export function RunPage() {
         {view.meters.spentUsd !== undefined ? (
           <MeterBar label="COST" value={`$${view.meters.spentUsd.toFixed(2)}`} fraction={0} />
         ) : null}
-        <div className="ml-auto flex gap-1 rounded-xl border border-[var(--line)] bg-[var(--glass)] p-1">
+        <div className="ml-auto flex gap-1 rounded-lg border border-[var(--line)] bg-[var(--surface)] p-1">
           {TABS.map((t) => (
             <button
               key={t.id}
               type="button"
               onClick={() => setTab(t.id)}
               className={cn(
-                "rounded-lg px-4 py-1.5 text-[12.5px] font-semibold transition",
+                "rounded-md px-4 py-1.5 text-[12.5px] font-medium transition",
                 tab === t.id
-                  ? "bg-gradient-to-br from-[rgba(138,108,255,.4)] to-[rgba(74,214,255,.3)] text-white shadow-[0_4px_14px_rgba(138,108,255,.3)]"
+                  ? "bg-violet text-white"
                   : "text-mut hover:text-ink",
               )}
             >
@@ -150,10 +151,10 @@ function StatusPill({ status, live }: { status: string; live: boolean }) {
     <span
       data-testid="run-status"
       className={cn(
-        "flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-bold tracking-[.3px]",
+        "flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-semibold tracking-[.3px]",
         live
-          ? "border-[rgba(70,227,173,.3)] bg-[rgba(70,227,173,.1)] text-[#9af3d4]"
-          : "border-[var(--line2)] bg-[var(--glass)] text-ink2",
+          ? "border-[color-mix(in_srgb,var(--ok)_35%,var(--line))] bg-[color-mix(in_srgb,var(--ok)_12%,var(--surface))] text-ok"
+          : "border-[var(--line2)] bg-[var(--surface)] text-ink2",
       )}
     >
       {live ? <span className="size-2 rounded-full bg-ok" /> : null}
@@ -167,33 +168,35 @@ function PauseCancel({ runId, disabled }: { runId: string; disabled: boolean }) 
   const cancel = useCancelRun(runId);
   return (
     <>
-      <button
-        type="button"
-        disabled={disabled || pause.isPending}
+      <Button
+        variant="secondary"
+        size="sm"
+        disabled={disabled}
+        loading={pause.isPending}
         onClick={() => pause.mutate()}
-        className="rounded-xl border border-[var(--line2)] bg-[var(--glass2)] px-4 py-2 text-[13px] font-semibold disabled:opacity-40"
       >
         ❚❚ Pause
-      </button>
-      <button
-        type="button"
-        disabled={disabled || cancel.isPending}
+      </Button>
+      <Button
+        variant="danger"
+        size="sm"
+        disabled={disabled}
+        loading={cancel.isPending}
         onClick={() => cancel.mutate()}
-        className="rounded-xl border border-[rgba(255,107,154,.4)] bg-[rgba(255,107,154,.13)] px-4 py-2 text-[13px] font-semibold text-[#ffd0e0] disabled:opacity-40"
       >
         ■ Cancel run
-      </button>
+      </Button>
     </>
   );
 }
 
 const TAG_STYLE: Record<RunEventType, string> = {
-  node_start: "bg-[rgba(70,227,173,.18)] text-[#bff5e3]",
-  node_end: "bg-[rgba(70,227,173,.18)] text-[#bff5e3]",
-  tool_call: "bg-[rgba(74,214,255,.18)] text-[#c4eeff]",
-  llm_call: "bg-[rgba(138,108,255,.22)] text-[#e3daff]",
+  node_start: "bg-tl-grep text-ink",
+  node_end: "bg-tl-grep text-ink",
+  tool_call: "bg-tl-read text-ink",
+  llm_call: "bg-tl-edit text-ink",
   cost_update: "bg-[var(--glass2)] text-mut",
-  gate_pending: "bg-[rgba(255,209,102,.2)] text-[#ffe7ad]",
+  gate_pending: "bg-tl-done text-white",
   run_status: "bg-[var(--glass2)] text-ink2",
 };
 

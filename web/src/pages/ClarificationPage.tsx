@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { Button } from "../components/ui/Button";
+import { Textarea } from "../components/ui/Field";
 import { useClarification, useSubmitAnswer } from "../lib/api/clarification";
 
 export function ClarificationPage() {
@@ -44,7 +46,7 @@ export function ClarificationPage() {
     <div className="flex min-h-screen flex-col">
       <div className="flex items-center gap-3 border-b border-[var(--line)] px-7 py-4 text-sm text-mut">
         Goals / <b className="text-ink">Clarification</b>
-        <span className="ml-auto rounded-full border border-[rgba(255,209,102,.35)] bg-[rgba(255,209,102,.15)] px-2.5 py-1 text-[11px] font-semibold text-[#ffe2a0]">
+        <span className="ml-auto rounded-full border border-[color-mix(in_srgb,var(--warn)_38%,var(--line))] bg-[color-mix(in_srgb,var(--warn)_15%,var(--surface))] px-2.5 py-1 text-[11px] font-semibold text-warn">
           {current
             ? `needs_clarification · ${questions.length - answeredQuestions.length} left`
             : "ready"}
@@ -86,11 +88,11 @@ export function ClarificationPage() {
 
           {/* current question — one at a time */}
           {current ? (
-            <div className="rounded-2xl border border-[rgba(184,166,255,.32)] bg-[var(--glass)] p-6">
-              <div className="mb-3 inline-block rounded-md border border-[rgba(255,209,102,.3)] bg-[rgba(255,209,102,.14)] px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-[#ffe2a0]">
+            <div className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-6">
+              <div className="mb-3 inline-block rounded-md border border-[color-mix(in_srgb,var(--warn)_32%,var(--line))] bg-[color-mix(in_srgb,var(--warn)_14%,var(--surface))] px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-warn">
                 Clarify · {current.missing_requirement}
               </div>
-              <h2 className="text-[18px] font-bold leading-snug text-white">
+              <h2 className="font-display text-[22px] leading-snug text-ink">
                 {current.question}
               </h2>
 
@@ -102,7 +104,7 @@ export function ClarificationPage() {
                       type="button"
                       disabled={submit.isPending}
                       onClick={() => sendAnswer(opt)}
-                      className="flex items-center gap-3 rounded-xl border border-[var(--line2)] bg-white/[0.03] px-4 py-3 text-left text-[14px] text-ink transition hover:border-[#cdbcff] hover:bg-[rgba(138,108,255,.14)] disabled:opacity-50"
+                      className="flex items-center gap-3 rounded-xl border border-[var(--line2)] bg-[var(--canvas-soft)] px-4 py-3 text-left text-[14px] text-ink transition hover:border-[var(--violet)] hover:bg-[color-mix(in_srgb,var(--violet)_11%,var(--surface))] disabled:opacity-50"
                     >
                       <span
                         aria-hidden
@@ -121,26 +123,26 @@ export function ClarificationPage() {
                   {currentOptions.length > 0 ? "Or type your own" : "Your answer"}
                 </div>
                 <div className="flex items-end gap-3">
-                  <textarea
+                  <Textarea
                     aria-label="Answer"
                     value={answer}
                     onChange={(e) => setAnswer(e.target.value)}
                     placeholder="Type an answer…"
-                    className="max-h-[120px] min-h-[48px] flex-1 resize-none rounded-xl border border-[var(--line2)] bg-white/[0.03] px-4 py-3 text-sm text-ink outline-none focus:border-[#cdbcff]"
+                    className="max-h-[120px] min-h-[48px] flex-1 resize-none"
                   />
-                  <button
-                    type="button"
+                  <Button
+                    size="lg"
                     onClick={() => sendAnswer(answer)}
-                    disabled={submit.isPending || answer.trim().length === 0}
-                    className="rounded-xl bg-gradient-to-br from-violet to-teal px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
+                    disabled={answer.trim().length === 0}
+                    loading={submit.isPending}
                   >
                     Send ↵
-                  </button>
+                  </Button>
                 </div>
               </div>
 
               {submit.isError ? (
-                <div className="mt-3 rounded-lg bg-[rgba(255,107,154,.14)] px-3 py-1.5 text-[12.5px] text-[#ffd0e0]">
+                <div className="mt-3 rounded-lg bg-[color-mix(in_srgb,var(--bad)_12%,var(--surface))] px-3 py-1.5 text-[12.5px] text-bad">
                   The LLM provider failed — check it in Settings and try again.
                 </div>
               ) : null}
@@ -149,7 +151,7 @@ export function ClarificationPage() {
               ) : null}
             </div>
           ) : (
-            <div className="rounded-2xl border border-[rgba(70,227,173,.3)] bg-[var(--glass)] p-6 text-center">
+            <div className="rounded-2xl border border-[color-mix(in_srgb,var(--ok)_32%,var(--line))] bg-[var(--glass)] p-6 text-center">
               <div className="text-[15px] font-bold text-ink">All questions answered</div>
               <p className="mt-1 text-[13px] text-mut">
                 {submit.isError

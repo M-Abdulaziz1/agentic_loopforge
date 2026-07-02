@@ -1,23 +1,53 @@
 @import "tailwindcss";
 
+/*
+ * LoopForge — Cursor editorial system.
+ * Warm cream canvas, warm near-black ink, a single orange voltage, hairline-only
+ * depth (no drop shadows), magazine display voice at weight 400. Token *names*
+ * are kept from the previous theme (violet/teal/ink/mut/ok/warn/bad) so the whole
+ * app re-skins by repointing values — violet/teal now resolve to the orange family
+ * so the old gradients collapse into a single on-brand hue.
+ */
 :root {
-  --bg0: #08081a;
-  --violet: #8a6cff;
-  --teal: #4ad6ff;
-  --ink: #f0eeff;
-  --ink2: #cfcbf0;
-  --mut: #928db8;
-  --ok: #46e3ad;
-  --warn: #ffd166;
-  --bad: #ff6b9a;
-  --glass: rgba(255, 255, 255, 0.05);
-  --glass2: rgba(255, 255, 255, 0.08);
-  --line: rgba(255, 255, 255, 0.1);
-  --line2: rgba(255, 255, 255, 0.16);
+  /* surface */
+  --bg0: #f7f7f4; /* cream page floor */
+  --canvas-soft: #fafaf7; /* inset panes */
+  --surface: #ffffff; /* card surface */
+  --surface-strong: #edece6; /* tag / track fill */
+
+  /* ink */
+  --ink: #26251e; /* warm near-black — display + emphasis */
+  --ink2: #4b4941; /* body strong */
+  --mut: #807d72; /* muted labels */
+  --mut-soft: #a09c92;
+
+  /* brand voltage — single orange */
+  --violet: #f54e00; /* Cursor Orange (primary) */
+  --teal: #d04200; /* Orange active (gradient anchor) */
+
+  /* semantic */
+  --ok: #1f8a65;
+  --warn: #c08532;
+  --bad: #cf2d56;
+
+  /* AI-timeline signature pastels — used only in agent visualizations */
+  --tl-think: #dfa88f; /* peach */
+  --tl-grep: #9fc9a2; /* mint */
+  --tl-read: #9fbbe0; /* blue */
+  --tl-edit: #c0a8dd; /* lavender */
+  --tl-done: #c08532; /* gold */
+
+  /* fills + hairlines (ink-based, so they read on cream) */
+  --glass: rgba(255, 255, 255, 0.72); /* soft white surface over cream */
+  --glass2: rgba(38, 37, 30, 0.055); /* faint ink wash for insets */
+  --line: rgba(38, 37, 30, 0.11); /* hairline */
+  --line2: rgba(38, 37, 30, 0.2); /* stronger hairline */
 }
 
 @theme {
   --color-bg0: var(--bg0);
+  --color-canvas-soft: var(--canvas-soft);
+  --color-surface: var(--surface);
   --color-violet: var(--violet);
   --color-teal: var(--teal);
   --color-ink: var(--ink);
@@ -26,8 +56,13 @@
   --color-ok: var(--ok);
   --color-warn: var(--warn);
   --color-bad: var(--bad);
+  --color-tl-think: var(--tl-think);
+  --color-tl-grep: var(--tl-grep);
+  --color-tl-read: var(--tl-read);
+  --color-tl-edit: var(--tl-edit);
+  --color-tl-done: var(--tl-done);
   --font-sans: "Inter", system-ui, sans-serif;
-  --font-display: "Sora", "Inter", system-ui, sans-serif;
+  --font-display: "Inter Tight", "Inter", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 }
 
@@ -43,34 +78,25 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  /* Cream floor with the faintest warm lift — hairline depth, never a glow field. */
   background:
-    radial-gradient(1100px 620px at 84% -14%, rgba(138, 108, 255, 0.3), transparent 56%),
-    radial-gradient(920px 620px at -12% 112%, rgba(74, 214, 255, 0.2), transparent 58%),
-    radial-gradient(700px 500px at 50% 120%, rgba(138, 108, 255, 0.1), transparent 60%),
+    radial-gradient(1200px 700px at 88% -8%, rgba(245, 78, 0, 0.035), transparent 60%),
     var(--bg0);
   background-attachment: fixed;
 }
 
-/* Fine grain overlay for depth — sits above the gradient field, below content. */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  opacity: 0.4;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.045'/%3E%3C/svg%3E");
-}
 #root {
   position: relative;
   z-index: 1;
 }
 
+/* Magazine display voice: editorial grotesque at weight 400, negative tracking. */
 h1,
 h2,
 h3 {
   font-family: var(--font-display);
-  letter-spacing: -0.01em;
+  font-weight: 400;
+  letter-spacing: -0.022em;
 }
 
 /* ---- motion ---- */
@@ -83,22 +109,15 @@ h3 {
   0%,
   100% {
     opacity: 1;
-    transform: scale(1);
   }
   50% {
-    opacity: 0.72;
-    transform: scale(1.045);
-  }
-}
-@keyframes lf-orbit {
-  to {
-    transform: rotate(360deg);
+    opacity: 0.55;
   }
 }
 @keyframes lf-rise {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(9px);
   }
   to {
     opacity: 1;
@@ -108,33 +127,47 @@ h3 {
 .lf-rise {
   animation: lf-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
-
-/* ---- agent pipeline conduits ---- */
 @keyframes lf-shimmer {
   to {
     background-position: -200% 0;
   }
 }
+
+/* ---- editorial primitives ---- */
+/* White card floating on cream via a hairline — no shadow. */
+.lf-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+/* Uppercase section / eyebrow label. */
+.lf-eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.88px;
+  text-transform: uppercase;
+  color: var(--mut);
+}
+/* Agent-timeline conduit, now in the orange voltage. */
 .lf-conduit {
-  height: 2.5px;
+  height: 2px;
   border-radius: 3px;
 }
 .lf-conduit--idle {
   background: var(--line2);
 }
 .lf-conduit--done {
-  background: linear-gradient(90deg, var(--violet), var(--teal));
+  background: var(--violet);
 }
 .lf-conduit--active {
-  background: linear-gradient(90deg, rgba(138, 108, 255, 0.2), var(--teal), rgba(138, 108, 255, 0.2));
+  background: linear-gradient(90deg, rgba(245, 78, 0, 0.12), var(--violet), rgba(245, 78, 0, 0.12));
   background-size: 200% 100%;
-  animation: lf-shimmer 1.1s linear infinite;
-  box-shadow: 0 0 12px rgba(74, 214, 255, 0.55);
+  animation: lf-shimmer 1.3s linear infinite;
 }
 
-/* Keyboard focus ring (low specificity via :where so components can still style). */
+/* Keyboard focus ring — the orange voltage. */
 :where(a, button, input, textarea, select, [role="switch"], [tabindex]):focus-visible {
-  outline: 2px solid var(--teal);
+  outline: 2px solid var(--violet);
   outline-offset: 2px;
   border-radius: 6px;
 }

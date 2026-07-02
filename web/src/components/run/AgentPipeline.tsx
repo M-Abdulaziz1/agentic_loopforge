@@ -15,9 +15,16 @@ function monogram(name: string): string {
   return (name.trim()[0] ?? "?").toUpperCase();
 }
 
+/* Cursor's signature: agent stages read as pastel timeline pills. */
+const STAGE_LABEL: Record<AgentStatus, string> = {
+  idle: "Queued",
+  running: "Thinking",
+  done: "Done",
+};
+
 const LEGEND: { label: string; status: AgentStatus }[] = [
-  { label: "Idle", status: "idle" },
-  { label: "Running", status: "running" },
+  { label: "Queued", status: "idle" },
+  { label: "Thinking", status: "running" },
   { label: "Done", status: "done" },
 ];
 
@@ -26,20 +33,10 @@ export function AgentPipeline({ agents, view, selectedId, onSelect }: Props) {
   const doneCount = agents.filter((a) => statusOf(a.name) === "done").length;
 
   return (
-    <div
-      className="flex h-full flex-col"
-      style={{
-        backgroundImage:
-          "radial-gradient(820px 500px at 50% -14%, rgba(138,108,255,.16), transparent 62%)," +
-          "radial-gradient(600px 400px at 100% 110%, rgba(74,214,255,.08), transparent 60%)," +
-          "linear-gradient(rgba(255,255,255,.02) 1px, transparent 1px)," +
-          "linear-gradient(90deg, rgba(255,255,255,.02) 1px, transparent 1px)",
-        backgroundSize: "auto, auto, 36px 36px, 36px 36px",
-      }}
-    >
+    <div className="flex h-full flex-col bg-[var(--bg0)]">
       {/* header: title + segmented progress + legend */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-[var(--line)] bg-[rgba(8,8,26,.5)] px-6 py-3 backdrop-blur-md">
-        <span className="text-[11px] font-bold uppercase tracking-[1.6px] text-mut">Agent modules</span>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-[var(--line)] bg-[var(--canvas-soft)] px-6 py-3">
+        <span className="lf-eyebrow">Agent modules</span>
         <span className="rounded-md bg-[var(--glass2)] px-2 py-0.5 font-mono text-[11px] text-ink2">
           {agents.length}
         </span>
@@ -67,9 +64,9 @@ export function AgentPipeline({ agents, view, selectedId, onSelect }: Props) {
         </div>
       </div>
 
-      {/* modular grid — self-contained tiles, no linear rail */}
+      {/* modular grid — self-contained tiles */}
       <div className="min-h-0 flex-1 overflow-auto" onClick={() => onSelect(null)}>
-        <div className="flex min-h-full items-center justify-center p-8">
+        <div className="flex min-h-full items-start justify-center p-8">
           <div
             className="grid w-full max-w-[980px] gap-5"
             style={{ gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))" }}
@@ -93,15 +90,30 @@ export function AgentPipeline({ agents, view, selectedId, onSelect }: Props) {
 }
 
 const SEG: Record<AgentStatus, string> = {
-  idle: "bg-[var(--line2)]",
-  running: "bg-gradient-to-r from-violet to-teal",
-  done: "bg-ok",
+  idle: "bg-[var(--surface-strong)]",
+  running: "bg-tl-think",
+  done: "bg-tl-done",
 };
 
 const DOT: Record<AgentStatus, string> = {
-  idle: "bg-[var(--line2)]",
-  running: "bg-violet shadow-[0_0_8px_var(--violet)]",
-  done: "bg-ok shadow-[0_0_8px_var(--ok)]",
+  idle: "bg-[var(--surface-strong)]",
+  running: "bg-tl-think",
+  done: "bg-tl-done",
+};
+
+/* Pastel stage-pill styling (Cursor timeline signature). */
+const STAGE_PILL: Record<AgentStatus, string> = {
+  idle: "bg-[var(--surface-strong)] text-mut",
+  running: "bg-tl-think text-ink",
+  done: "bg-tl-done text-white",
+};
+
+/* Card top accent bar per stage. */
+const ACCENT: Record<AgentStatus, string> = {
+  idle: "bg-[var(--surface-strong)]",
+  running:
+    "bg-gradient-to-r from-tl-think via-tl-edit to-tl-think [background-size:200%_100%] [animation:lf-shimmer_1.6s_linear_infinite]",
+  done: "bg-tl-done",
 };
 
 function AgentModule({
@@ -126,16 +138,14 @@ function AgentModule({
         e.stopPropagation();
         onSelect(selected ? null : agent.name);
       }}
-      style={{ animationDelay: `${index * 80}ms` }}
+      style={{ animationDelay: `${index * 70}ms` }}
       className={cn(
-        "lf-rise group relative flex flex-col overflow-hidden rounded-3xl border p-5 text-left backdrop-blur-md transition duration-200",
+        "lf-rise group relative flex flex-col overflow-hidden rounded-xl border bg-[var(--surface)] p-5 text-left transition duration-200",
         selected
-          ? "border-teal bg-[rgba(74,214,255,.06)] shadow-[0_0_0_1px_var(--teal),0_20px_50px_rgba(74,214,255,.2)]"
+          ? "border-violet shadow-[0_0_0_1px_var(--violet)]"
           : status === "running"
-            ? "border-[rgba(205,188,255,.5)] bg-white/[0.045] shadow-[0_18px_46px_rgba(138,108,255,.22)]"
-            : status === "done"
-              ? "border-[var(--line2)] bg-white/[0.03] hover:-translate-y-1 hover:border-[rgba(70,227,173,.4)] hover:shadow-[0_20px_48px_rgba(70,227,173,.14)]"
-              : "border-[var(--line)] bg-white/[0.02] hover:-translate-y-1 hover:border-[var(--line2)] hover:shadow-[0_20px_48px_rgba(138,108,255,.14)]",
+            ? "border-[color-mix(in_srgb,var(--tl-think)_60%,var(--line))] hover:-translate-y-0.5"
+            : "border-[var(--line)] hover:-translate-y-0.5 hover:border-[var(--line2)]",
       )}
     >
       {/* status accent bar */}
@@ -145,10 +155,10 @@ function AgentModule({
       <div className="flex items-start gap-3">
         <Tile name={agent.name} status={status} />
         <div className="min-w-0 flex-1">
-          <div className="truncate font-display text-[16px] font-bold text-ink">{agent.name}</div>
+          <div className="truncate font-display text-[16px] text-ink">{agent.name}</div>
           <div className="truncate text-[12px] text-mut">{agent.role}</div>
         </div>
-        <StatusTag status={status} />
+        <StageTag status={status} />
       </div>
 
       {/* body: the module's charter */}
@@ -162,7 +172,7 @@ function AgentModule({
           {agent.tools.slice(0, 4).map((t) => (
             <span
               key={t}
-              className="rounded-md border border-[rgba(74,214,255,.22)] bg-[rgba(74,214,255,.1)] px-1.5 py-0.5 font-mono text-[10px] text-[#c4eeff]"
+              className="rounded-md border border-[var(--line)] bg-[var(--glass2)] px-1.5 py-0.5 font-mono text-[10px] text-ink2"
             >
               {t}
             </span>
@@ -184,7 +194,7 @@ function AgentModule({
           <span className={cn("size-1.5 rounded-full", DOT[status])} />
           {activity > 0 ? `${activity} event${activity === 1 ? "" : "s"}` : "no activity"}
         </span>
-        <span className="ml-auto font-semibold text-mut transition group-hover:text-teal">
+        <span className="ml-auto font-medium text-mut transition group-hover:text-violet">
           Inspect →
         </span>
       </div>
@@ -192,29 +202,23 @@ function AgentModule({
   );
 }
 
-const ACCENT: Record<AgentStatus, string> = {
-  idle: "bg-[var(--line2)]",
-  running: "bg-gradient-to-r from-violet via-teal to-violet [background-size:200%_100%] [animation:lf-shimmer_1.4s_linear_infinite]",
-  done: "bg-gradient-to-r from-teal to-ok",
-};
-
 function Tile({ name, status }: { name: string; status: AgentStatus }) {
   return (
     <div className="relative grid size-12 shrink-0 place-items-center">
       <div
         className={cn(
-          "grid size-12 place-items-center rounded-2xl border font-display text-[16px] font-bold transition",
+          "grid size-12 place-items-center rounded-lg border font-display text-[16px] transition",
           status === "done"
-            ? "border-[rgba(70,227,173,.45)] bg-[rgba(70,227,173,.14)] text-ok"
+            ? "border-transparent bg-tl-done text-white"
             : status === "running"
-              ? "border-transparent bg-gradient-to-br from-violet to-teal text-white shadow-[0_0_24px_rgba(138,108,255,.5)]"
-              : "border-[var(--line2)] bg-[var(--glass)] text-ink2",
+              ? "border-transparent bg-tl-think text-ink"
+              : "border-[var(--line)] bg-[var(--canvas-soft)] text-mut",
         )}
       >
         {monogram(name)}
       </div>
       {status === "done" ? (
-        <span className="absolute -bottom-1 -right-1 grid size-[18px] place-items-center rounded-full border border-bg0 bg-ok text-[10px] font-bold text-[#04231a]">
+        <span className="absolute -bottom-1 -right-1 grid size-[18px] place-items-center rounded-full border border-[var(--bg0)] bg-tl-done text-[10px] font-bold text-white">
           ✓
         </span>
       ) : null}
@@ -222,20 +226,15 @@ function Tile({ name, status }: { name: string; status: AgentStatus }) {
   );
 }
 
-function StatusTag({ status }: { status: AgentStatus }) {
-  const map: Record<AgentStatus, string> = {
-    idle: "bg-[var(--glass2)] text-mut",
-    running: "bg-[rgba(138,108,255,.28)] text-[#e3daff]",
-    done: "bg-[rgba(70,227,173,.2)] text-[#bff5e3]",
-  };
+function StageTag({ status }: { status: AgentStatus }) {
   return (
     <span
       className={cn(
-        "shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-[.5px]",
-        map[status],
+        "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[.6px]",
+        STAGE_PILL[status],
       )}
     >
-      {status}
+      {STAGE_LABEL[status]}
     </span>
   );
 }

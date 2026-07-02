@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { GlassCard } from "../components/ui/GlassCard";
+import { Button } from "../components/ui/Button";
+import { Select } from "../components/ui/Field";
 import { useGoals } from "../lib/api/goals";
 import {
   useDeleteTemplate,
@@ -20,7 +22,7 @@ export function TemplatesPage() {
     if (!goalId && goals.length) setGoalId(goals[0].id);
   }, [goals, goalId]);
 
-  async function useTemplate(templateId: string) {
+  async function applyTemplate(templateId: string) {
     if (!goalId) return;
     const spec = await instantiate.mutateAsync({ templateId, goalId });
     navigate(`/specs/${spec.id}`);
@@ -29,21 +31,21 @@ export function TemplatesPage() {
   return (
     <div className="flex min-h-screen flex-col">
       <div className="flex items-center gap-4 border-b border-[var(--line)] px-7 py-4">
-        <h1 className="text-base font-bold text-ink">Loop Templates</h1>
+        <h1 className="font-display text-[28px] leading-none text-ink">Loop Templates</h1>
         <div className="ml-auto flex items-center gap-2 text-[12.5px] text-mut">
           <span>Instantiate into goal:</span>
-          <select
+          <Select
             aria-label="Target goal"
             value={goalId}
             onChange={(e) => setGoalId(e.target.value)}
-            className="rounded-lg border border-[var(--line2)] bg-[var(--glass2)] px-2.5 py-1.5 text-ink"
+            className="h-9 w-auto text-[13px]"
           >
             {goals.map((g) => (
-              <option key={g.id} value={g.id} className="bg-bg0">
+              <option key={g.id} value={g.id} className="bg-surface text-ink">
                 {g.id}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
       </div>
 
@@ -56,7 +58,7 @@ export function TemplatesPage() {
           <div className="grid grid-cols-3 gap-4">
             {templates.map((t) => (
               <GlassCard key={t.id} className="flex flex-col">
-                <div className="text-base font-bold">{t.name}</div>
+                <div className="font-display text-[18px] text-ink">{t.name}</div>
                 {t.description ? (
                   <p className="mt-1 text-[12.5px] leading-relaxed text-mut">{t.description}</p>
                 ) : null}
@@ -71,22 +73,18 @@ export function TemplatesPage() {
                   ))}
                 </div>
                 <div className="mt-4 flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => useTemplate(t.id)}
-                    disabled={!goalId || instantiate.isPending}
-                    className="flex-1 rounded-xl bg-gradient-to-br from-violet to-teal px-3 py-2 text-[13px] font-bold text-white disabled:opacity-50"
+                  <Button
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => applyTemplate(t.id)}
+                    disabled={!goalId}
+                    loading={instantiate.isPending}
                   >
                     Use template
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => del.mutate(t.id)}
-                    disabled={del.isPending}
-                    className="rounded-xl border border-[rgba(255,107,154,.35)] bg-[rgba(255,107,154,.12)] px-3 py-2 text-[13px] font-semibold text-[#ffd0e0]"
-                  >
+                  </Button>
+                  <Button variant="danger" size="sm" onClick={() => del.mutate(t.id)} loading={del.isPending}>
                     Delete
-                  </button>
+                  </Button>
                 </div>
               </GlassCard>
             ))}

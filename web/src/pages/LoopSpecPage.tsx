@@ -1,5 +1,6 @@
 import { useNavigate, useParams } from "react-router-dom";
 import { GlassCard } from "../components/ui/GlassCard";
+import { Button } from "../components/ui/Button";
 import { cn } from "../lib/cn";
 import { useApproveLoopSpec, useLoopSpec } from "../lib/api/loopspecs";
 import { useGoal } from "../lib/api/goals";
@@ -39,8 +40,8 @@ export function LoopSpecPage() {
           className={cn(
             "ml-auto rounded-full px-2.5 py-1 text-[11px] font-bold",
             spec.status === "approved"
-              ? "border border-[rgba(70,227,173,.35)] bg-[rgba(70,227,173,.12)] text-[#9af3d4]"
-              : "border border-[rgba(255,209,102,.35)] bg-[rgba(255,209,102,.15)] text-[#ffe2a0]",
+              ? "border border-[color-mix(in_srgb,var(--ok)_35%,var(--line))] bg-[color-mix(in_srgb,var(--ok)_11%,var(--surface))] text-ok"
+              : "border border-[color-mix(in_srgb,var(--warn)_38%,var(--line))] bg-[color-mix(in_srgb,var(--warn)_15%,var(--surface))] text-warn",
           )}
         >
           {spec.status === "approved" ? "APPROVED" : "DRAFT · awaiting your review"}
@@ -48,7 +49,7 @@ export function LoopSpecPage() {
       </div>
 
       <div className="flex-1 overflow-auto px-7 pb-28 pt-6">
-        <h1 className="text-[22px] font-extrabold tracking-tight">Review the generated loop</h1>
+        <h1 className="font-display text-[30px] leading-none text-ink">Review the generated loop</h1>
         {goal ? (
           <p className="mb-5 mt-1.5 max-w-[760px] text-sm leading-relaxed text-mut">
             From your goal: <i>“{goal.text}”</i>
@@ -63,13 +64,13 @@ export function LoopSpecPage() {
                 {spec.agents.map((a, i) => (
                   <div key={a.name} className="flex items-center gap-1">
                     <div className="flex min-w-[88px] flex-col items-center gap-1.5">
-                      <div className="grid size-[52px] place-items-center rounded-2xl border border-[var(--line2)] bg-gradient-to-br from-[rgba(138,108,255,.4)] to-[rgba(74,214,255,.3)] text-lg">
+                      <div className="grid size-[52px] place-items-center rounded-2xl border border-[var(--line2)] bg-violet text-lg">
                         {glyph(a.name)}
                       </div>
                       <small className="text-[11.5px] text-ink2">{a.name}</small>
                     </div>
                     {i < spec.agents.length - 1 ? (
-                      <div className="h-0.5 w-7 bg-gradient-to-r from-violet to-teal opacity-60" />
+                      <div className="h-0.5 w-7 bg-violet opacity-60" />
                     ) : null}
                   </div>
                 ))}
@@ -82,10 +83,10 @@ export function LoopSpecPage() {
                 {spec.agents.map((a) => (
                   <div
                     key={a.name}
-                    className="rounded-2xl border border-[var(--line2)] bg-white/[0.025] p-3.5"
+                    className="rounded-2xl border border-[var(--line2)] bg-[var(--canvas-soft)] p-3.5"
                   >
                     <div className="mb-2.5 flex items-center gap-2.5">
-                      <div className="grid size-9 place-items-center rounded-xl bg-gradient-to-br from-violet to-teal text-base">
+                      <div className="grid size-9 place-items-center rounded-xl bg-violet text-base">
                         {glyph(a.name)}
                       </div>
                       <div>
@@ -125,7 +126,7 @@ export function LoopSpecPage() {
             <RailCard title="Approval gates">
               {spec.gates.map((g) => (
                 <div key={g} className="flex items-center gap-2.5 py-2 text-[13px]">
-                  <span className="grid size-[26px] place-items-center rounded-lg border border-[rgba(255,209,102,.3)] bg-[rgba(255,209,102,.13)] text-warn">
+                  <span className="grid size-[26px] place-items-center rounded-lg border border-[color-mix(in_srgb,var(--warn)_32%,var(--line))] bg-[color-mix(in_srgb,var(--warn)_13%,var(--surface))] text-warn">
                     ⛬
                   </span>
                   {g}
@@ -140,7 +141,7 @@ export function LoopSpecPage() {
                     <span
                       key={p.tool_name}
                       title={p.reason}
-                      className="rounded-md border border-[rgba(255,107,154,.3)] bg-[rgba(255,107,154,.12)] px-2 py-0.5 text-[11px] text-[#ffb9d2] line-through"
+                      className="rounded-md border border-[color-mix(in_srgb,var(--bad)_32%,var(--line))] bg-[color-mix(in_srgb,var(--bad)_11%,var(--surface))] px-2 py-0.5 text-[11px] text-bad line-through"
                     >
                       {p.tool_name}
                     </span>
@@ -157,45 +158,27 @@ export function LoopSpecPage() {
         </div>
       </div>
 
-      <div className="fixed bottom-0 left-[250px] right-0 flex items-center gap-3 border-t border-[var(--line)] bg-[rgba(8,8,26,.92)] px-7 py-4 backdrop-blur">
+      <div className="fixed bottom-0 left-[250px] right-0 flex items-center gap-3 border-t border-[var(--line)] bg-[color-mix(in_srgb,var(--bg0)_92%,transparent)] px-7 py-4 backdrop-blur-md">
         <div className="text-[12.5px] text-mut">
           {isApproved
             ? "Spec approved. Start the run to execute the loop."
             : "Approve to enable the run. You can edit any section first."}
         </div>
         <div className="flex-1" />
-        <button
-          type="button"
-          onClick={() => navigate("/goals")}
-          className="rounded-xl border border-[rgba(255,107,154,.35)] bg-[rgba(255,107,154,.12)] px-[18px] py-2.5 text-sm font-semibold text-[#ffd0e0]"
-        >
+        <Button variant="danger" onClick={() => navigate("/goals")}>
           Reject
-        </button>
-        <button
-          type="button"
-          onClick={() => navigate(`/specs/${spec.id}/edit`)}
-          className="rounded-xl border border-[var(--line2)] bg-[var(--glass2)] px-[18px] py-2.5 text-sm font-semibold"
-        >
+        </Button>
+        <Button variant="secondary" onClick={() => navigate(`/specs/${spec.id}/edit`)}>
           ✎ Edit in builder
-        </button>
+        </Button>
         {isApproved ? (
-          <button
-            type="button"
-            onClick={startRunNow}
-            disabled={startRun.isPending}
-            className="rounded-xl bg-gradient-to-br from-violet to-teal px-[22px] py-2.5 text-sm font-bold text-white shadow-[0_8px_24px_rgba(138,108,255,.35)] disabled:opacity-50"
-          >
+          <Button onClick={startRunNow} loading={startRun.isPending}>
             {startRun.isPending ? "Starting…" : "▶ Start run"}
-          </button>
+          </Button>
         ) : (
-          <button
-            type="button"
-            onClick={approveSpec}
-            disabled={approve.isPending}
-            className="rounded-xl bg-gradient-to-br from-ok to-[#28c596] px-[22px] py-2.5 text-sm font-bold text-[#04231a] shadow-[0_8px_24px_rgba(70,227,173,.3)] disabled:opacity-50"
-          >
+          <Button variant="success" onClick={approveSpec} loading={approve.isPending}>
             {approve.isPending ? "Approving…" : "✓ Approve & enable run"}
-          </button>
+          </Button>
         )}
       </div>
     </div>
@@ -214,7 +197,7 @@ function glyph(name: string): string {
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mb-3.5 text-[11px] font-bold uppercase tracking-wide text-mut">
+    <div className="mb-3.5 text-[11px] font-semibold uppercase tracking-[.88px] text-mut">
       {children}
     </div>
   );
@@ -222,7 +205,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 
 function Chip({ children }: { children: React.ReactNode }) {
   return (
-    <span className="rounded-md border border-[rgba(74,214,255,.25)] bg-[rgba(74,214,255,.15)] px-2 py-0.5 text-[10px] text-[#c4eeff]">
+    <span className="rounded-md border border-[var(--line2)] bg-[var(--glass2)] px-2 py-0.5 text-[10px] text-ink2">
       {children}
     </span>
   );

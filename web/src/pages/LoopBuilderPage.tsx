@@ -15,6 +15,7 @@ import ReactFlow, {
 import "reactflow/dist/style.css";
 import { AgentNode } from "../components/run/AgentNode";
 import { NodeConfigPanel } from "../components/run/NodeConfigPanel";
+import { Button } from "../components/ui/Button";
 import { useLoopSpec, useUpdateLoopSpec } from "../lib/api/loopspecs";
 import { useCreateTemplate } from "../lib/api/templates";
 import { useGoal } from "../lib/api/goals";
@@ -142,36 +143,18 @@ export function LoopBuilderPage() {
           <span className="font-mono text-mut">spec v{spec.version}</span>
         </div>
         <div className="flex-1" />
-        <button
-          type="button"
-          onClick={addAgent}
-          className="rounded-xl border border-[var(--line2)] bg-[var(--glass2)] px-4 py-2 text-[13px] font-semibold"
-        >
+        <Button variant="secondary" size="sm" onClick={addAgent}>
           + Add agent
-        </button>
-        <button
-          type="button"
-          onClick={saveAsTemplate}
-          disabled={createTemplate.isPending}
-          className="rounded-xl border border-[var(--line2)] bg-[var(--glass2)] px-4 py-2 text-[13px] font-semibold disabled:opacity-50"
-        >
+        </Button>
+        <Button variant="secondary" size="sm" onClick={saveAsTemplate} loading={createTemplate.isPending}>
           ⧉ Save as template
-        </button>
-        <button
-          type="button"
-          onClick={() => navigate(`/specs/${specId}`)}
-          className="rounded-xl border border-[var(--line2)] bg-[var(--glass2)] px-4 py-2 text-[13px] font-semibold"
-        >
+        </Button>
+        <Button variant="ghost" size="sm" onClick={() => navigate(`/specs/${specId}`)}>
           Cancel
-        </button>
-        <button
-          type="button"
-          onClick={save}
-          disabled={errors.length > 0 || update.isPending}
-          className="rounded-xl bg-gradient-to-br from-violet to-teal px-5 py-2 text-[13px] font-bold text-white disabled:opacity-50"
-        >
+        </Button>
+        <Button size="sm" onClick={save} disabled={errors.length > 0} loading={update.isPending}>
           Save spec
-        </button>
+        </Button>
       </div>
 
       <div className="grid flex-1 grid-cols-[1fr_300px] overflow-hidden">
@@ -188,9 +171,9 @@ export function LoopBuilderPage() {
             fitView
             proOptions={{ hideAttribution: true }}
           >
-            <Background variant={BackgroundVariant.Dots} gap={26} size={1.1} color="#ffffff22" />
+            <Background variant={BackgroundVariant.Dots} gap={26} size={1.1} color="rgba(38,37,30,0.13)" />
             <Controls showInteractive={false} />
-            <MiniMap pannable zoomable nodeColor="#8a6cff" style={{ background: "rgba(12,12,30,.6)" }} />
+            <MiniMap pannable zoomable nodeColor="#f54e00" style={{ background: "#fafaf7", border: "1px solid rgba(38,37,30,.11)" }} />
           </ReactFlow>
         </div>
 
@@ -212,7 +195,7 @@ export function LoopBuilderPage() {
             Validation
           </h3>
           {errors.length === 0 ? (
-            <div className="rounded-xl border border-[rgba(70,227,173,.3)] bg-[rgba(70,227,173,.1)] px-3.5 py-3 text-[13px] font-semibold text-[#9af3d4]">
+            <div className="rounded-xl border border-[color-mix(in_srgb,var(--ok)_32%,var(--line))] bg-[color-mix(in_srgb,var(--ok)_10%,var(--surface))] px-3.5 py-3 text-[13px] font-semibold text-ok">
               ✓ Graph is valid — ready to save.
             </div>
           ) : (
@@ -220,7 +203,7 @@ export function LoopBuilderPage() {
               {errors.map((e, i) => (
                 <div
                   key={`${e.code}-${i}`}
-                  className="rounded-xl border border-[rgba(255,107,154,.35)] bg-[rgba(255,107,154,.1)] px-3.5 py-2.5 text-[12.5px] text-[#ffd0e0]"
+                  className="rounded-xl border border-[color-mix(in_srgb,var(--bad)_38%,var(--line))] bg-[color-mix(in_srgb,var(--bad)_10%,var(--surface))] px-3.5 py-2.5 text-[12.5px] text-bad"
                 >
                   <div className="font-bold">{e.code}</div>
                   <div className="mt-0.5 text-ink2">{e.message}</div>

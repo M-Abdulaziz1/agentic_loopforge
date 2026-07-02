@@ -1,4 +1,6 @@
 import { cn } from "../../lib/cn";
+import { Button } from "../ui/Button";
+import { Input, Textarea } from "../ui/Field";
 
 export const AVAILABLE_TOOLS = [
   "sandbox.exec",
@@ -33,33 +35,29 @@ export function NodeConfigPanel({
   onDelete,
 }: Props) {
   return (
-    <div className="mb-5 rounded-2xl border border-[var(--line2)] bg-[var(--glass)] p-4">
+    <div className="mb-5 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-4">
       <div className="mb-3 flex items-center gap-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-mut">Agent config</h3>
+        <h3 className="text-[11px] font-semibold uppercase tracking-[.88px] text-mut">Agent config</h3>
         <span className="font-mono text-[12px] text-ink2">{name}</span>
-        <button
-          type="button"
-          onClick={onDelete}
-          className="ml-auto rounded-md border border-[rgba(255,107,154,.35)] bg-[rgba(255,107,154,.12)] px-2 py-0.5 text-[11px] font-semibold text-[#ffd0e0]"
-        >
+        <Button variant="danger" size="sm" className="ml-auto h-7 px-2.5 text-[11px]" onClick={onDelete}>
           Delete
-        </button>
+        </Button>
       </div>
 
       <Label>Role</Label>
-      <input
+      <Input
         aria-label="Role"
         value={role}
         onChange={(e) => onRole(e.target.value)}
-        className="mb-3 w-full rounded-lg border border-[var(--line2)] bg-white/[0.03] px-3 py-2 text-[13px] text-ink outline-none focus:border-[#cdbcff]"
+        className="mb-3 h-10 text-[13px]"
       />
 
       <Label>System prompt</Label>
-      <textarea
+      <Textarea
         aria-label="System prompt"
         value={systemPrompt}
         onChange={(e) => onPrompt(e.target.value)}
-        className="mb-3 min-h-[88px] w-full resize-y rounded-lg border border-[var(--line2)] bg-white/[0.03] px-3 py-2 text-[13px] leading-relaxed text-ink outline-none focus:border-[#cdbcff]"
+        className="mb-3 min-h-[88px] text-[13px]"
       />
 
       <Label>Tools</Label>
@@ -75,10 +73,10 @@ export function NodeConfigPanel({
               onClick={() => onToggleTool(t)}
               title={locked ? "Internet is disabled in Offline-Local mode" : undefined}
               className={cn(
-                "rounded-md border px-2 py-1 text-[11px] font-semibold transition",
+                "rounded-md border px-2 py-1 text-[11px] font-medium transition",
                 on
-                  ? "border-[rgba(74,214,255,.4)] bg-[rgba(74,214,255,.18)] text-[#c4eeff]"
-                  : "border-[var(--line2)] bg-[var(--glass2)] text-mut hover:text-ink",
+                  ? "border-[color-mix(in_srgb,var(--violet)_45%,var(--line))] bg-[color-mix(in_srgb,var(--violet)_12%,var(--surface))] text-violet"
+                  : "border-[var(--line2)] bg-[var(--surface)] text-mut hover:border-[var(--mut)] hover:text-ink",
                 locked && "cursor-not-allowed opacity-40",
               )}
             >
@@ -93,5 +91,5 @@ export function NodeConfigPanel({
 }
 
 function Label({ children }: { children: React.ReactNode }) {
-  return <div className="mb-1.5 text-[10px] font-bold tracking-[.6px] text-mut">{children}</div>;
+  return <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-[.88px] text-mut">{children}</div>;
 }

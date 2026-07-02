@@ -1,13 +1,16 @@
 import { Link, useNavigate } from "react-router-dom";
 import { GlassCard } from "../components/ui/GlassCard";
+import { Button } from "../components/ui/Button";
+import { Badge } from "../components/ui/Badge";
 import { useGoals } from "../lib/api/goals";
 import type { RunStatus } from "../lib/api/types";
 
-const STATUS_STYLE: Partial<Record<RunStatus, string>> = {
-  completed: "bg-[rgba(70,227,173,.14)] text-[#9af3d4]",
-  running: "bg-[rgba(138,108,255,.2)] text-[#dcd0ff]",
-  needs_clarification: "bg-[rgba(255,209,102,.15)] text-[#ffe2a0]",
-  pending_approval: "bg-[rgba(255,209,102,.15)] text-[#ffe2a0]",
+type BadgeTone = "neutral" | "brand" | "ok" | "warn" | "bad";
+const STATUS_TONE: Partial<Record<RunStatus, BadgeTone>> = {
+  completed: "ok",
+  running: "brand",
+  needs_clarification: "warn",
+  pending_approval: "warn",
 };
 
 export function GoalsListPage() {
@@ -16,51 +19,44 @@ export function GoalsListPage() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <div className="flex items-center gap-4 border-b border-[var(--line)] px-7 py-4">
-        <h1 className="text-base font-bold text-ink">Goals</h1>
-        <button
-          type="button"
-          onClick={() => navigate("/goals/new")}
-          className="ml-auto rounded-xl bg-gradient-to-br from-violet to-teal px-4 py-2 text-[13px] font-bold text-white shadow-[0_8px_24px_rgba(138,108,255,.3)]"
-        >
-          + New goal
-        </button>
+      <div className="flex items-end gap-4 border-b border-[var(--line)] px-8 py-6">
+        <div>
+          <div className="lf-eyebrow">Build</div>
+          <h1 className="mt-1.5 font-display text-[32px] leading-none text-ink">Goals</h1>
+        </div>
+        <Button className="ml-auto" onClick={() => navigate("/goals/new")}>
+          New goal
+        </Button>
       </div>
 
-      <div className="flex-1 overflow-auto p-7">
+      <div className="mx-auto w-full max-w-[1200px] flex-1 overflow-auto p-8">
         {isLoading ? (
           <div className="text-mut">Loading goals…</div>
         ) : goals.length === 0 ? (
-          <div className="grid place-items-center py-20 text-center">
-            <div className="text-lg font-bold">No goals yet</div>
-            <p className="mt-2 max-w-sm text-sm text-mut">
+          <div className="grid place-items-center py-24 text-center">
+            <div className="font-display text-[26px] text-ink">No goals yet</div>
+            <p className="mt-2.5 max-w-sm text-[15px] leading-relaxed text-mut">
               Describe an end goal and LoopForge will turn it into a guarded agent loop.
             </p>
-            <button
-              type="button"
-              onClick={() => navigate("/goals/new")}
-              className="mt-5 rounded-xl bg-gradient-to-br from-violet to-teal px-5 py-2.5 text-sm font-bold text-white"
-            >
-              + Create your first goal
-            </button>
+            <Button className="mt-6" size="lg" onClick={() => navigate("/goals/new")}>
+              Create your first goal
+            </Button>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-5">
             {goals.map((g) => (
-              <Link key={g.id} to={`/goals/${g.id}/clarify`}>
-                <GlassCard className="transition hover:border-[var(--line2)]">
-                  <div className="mb-2 flex items-center gap-2">
+              <Link key={g.id} to={`/goals/${g.id}/clarify`} className="group">
+                <GlassCard className="h-full transition group-hover:-translate-y-0.5 group-hover:border-[var(--line2)]">
+                  <div className="mb-3 flex items-center gap-2">
                     <span className="font-mono text-[12px] text-mut">{g.id}</span>
-                    <span
-                      className={`ml-auto rounded-md px-2 py-0.5 text-[11px] font-bold ${
-                        STATUS_STYLE[g.status] ?? "bg-[var(--glass2)] text-ink2"
-                      }`}
-                    >
+                    <Badge className="ml-auto" tone={STATUS_TONE[g.status] ?? "neutral"}>
                       {g.status}
-                    </span>
+                    </Badge>
                   </div>
-                  <div className="text-[14px] leading-relaxed text-ink">{g.text}</div>
-                  <div className="mt-2 text-[12px] text-mut">{g.mode}</div>
+                  <div className="text-[15px] leading-relaxed text-ink">{g.text}</div>
+                  <div className="mt-3 border-t border-[var(--line)] pt-3 font-mono text-[11px] uppercase tracking-[.5px] text-mut">
+                    {g.mode}
+                  </div>
                 </GlassCard>
               </Link>
             ))}

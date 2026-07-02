@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { cn } from "../lib/cn";
+import { Button } from "../components/ui/Button";
+import { Input } from "../components/ui/Field";
 import { useGates, useDecideGate } from "../lib/api/gates";
 import type { Gate } from "../lib/api/types";
 
@@ -45,8 +47,8 @@ export function GateInboxPage() {
           {selected ? (
             <div className="overflow-auto p-7">
               <div className="mb-1.5 flex items-center gap-3">
-                <h1 className="text-xl font-extrabold">Run {selected.run_id}</h1>
-                <span className="rounded-lg border border-[rgba(255,209,102,.3)] bg-[rgba(255,209,102,.14)] px-2.5 py-1 text-[11px] font-extrabold text-warn">
+                <h1 className="font-display text-[24px] leading-none text-ink">Run {selected.run_id}</h1>
+                <span className="rounded-lg border border-[color-mix(in_srgb,var(--warn)_32%,var(--line))] bg-[color-mix(in_srgb,var(--warn)_14%,var(--surface))] px-2.5 py-1 text-[11px] font-extrabold text-warn">
                   ⛬ {selected.gate_type.toUpperCase()}
                 </span>
               </div>
@@ -77,29 +79,19 @@ export function GateInboxPage() {
               ) : null}
 
               <div className="mt-5 flex items-center gap-3">
-                <input
+                <Input
                   aria-label="Note"
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   placeholder="Optional note…"
-                  className="flex-1 rounded-xl border border-[var(--line2)] bg-white/[0.03] px-3.5 py-3 text-[13.5px] text-ink outline-none focus:border-[#cdbcff]"
+                  className="flex-1"
                 />
-                <button
-                  type="button"
-                  onClick={() => act("reject")}
-                  disabled={decide.isPending}
-                  className="rounded-xl border border-[rgba(255,107,154,.4)] bg-[rgba(255,107,154,.13)] px-5 py-3 text-sm font-bold text-[#ffd0e0] disabled:opacity-50"
-                >
+                <Button variant="danger" size="lg" onClick={() => act("reject")} disabled={decide.isPending}>
                   Reject
-                </button>
-                <button
-                  type="button"
-                  onClick={() => act("approve")}
-                  disabled={decide.isPending}
-                  className="rounded-xl bg-gradient-to-br from-ok to-[#28c596] px-5 py-3 text-sm font-extrabold text-[#04231a] disabled:opacity-50"
-                >
+                </Button>
+                <Button variant="success" size="lg" onClick={() => act("approve")} loading={decide.isPending}>
                   Approve
-                </button>
+                </Button>
               </div>
             </div>
           ) : null}
@@ -125,12 +117,12 @@ function GateRow({
       className={cn(
         "mb-2.5 block w-full rounded-xl border p-3.5 text-left",
         active
-          ? "border-[#cdbcff] bg-gradient-to-br from-[rgba(138,108,255,.2)] to-[rgba(74,214,255,.1)]"
+          ? "border-[var(--violet)] bg-[color-mix(in_srgb,var(--violet)_10%,var(--surface))]"
           : "border-[var(--line)] bg-[var(--glass)] hover:border-[var(--line2)]",
       )}
     >
       <div className="mb-1.5 flex items-center gap-2">
-        <span className="rounded-md border border-[rgba(255,209,102,.3)] bg-[rgba(255,209,102,.14)] px-1.5 py-0.5 text-[10px] font-extrabold tracking-[.4px] text-warn">
+        <span className="rounded-md border border-[color-mix(in_srgb,var(--warn)_32%,var(--line))] bg-[color-mix(in_srgb,var(--warn)_14%,var(--surface))] px-1.5 py-0.5 text-[10px] font-extrabold tracking-[.4px] text-warn">
           {gate.gate_type.toUpperCase()}
         </span>
       </div>
@@ -142,7 +134,7 @@ function GateRow({
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="rounded-2xl border border-[var(--line)] bg-[var(--glass)] p-[18px]">
-      <h3 className="mb-3 text-[11px] font-bold uppercase tracking-wide text-mut">{title}</h3>
+      <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-[.88px] text-mut">{title}</h3>
       {children}
     </div>
   );

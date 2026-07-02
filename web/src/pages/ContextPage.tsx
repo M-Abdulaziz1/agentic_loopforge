@@ -7,11 +7,11 @@ import { useGoal } from "../lib/api/goals";
 import type { ContextEntry } from "../lib/api/types";
 
 const KIND_STYLE: Record<string, string> = {
-  goal: "bg-[rgba(138,108,255,.22)] text-[#e3daff]",
-  summary: "bg-[rgba(255,209,102,.16)] text-[#ffe2a0]",
-  tool: "bg-[rgba(74,214,255,.18)] text-[#c4eeff]",
-  llm: "bg-[rgba(138,108,255,.18)] text-[#dcd0ff]",
-  artifact: "bg-[rgba(70,227,173,.16)] text-[#bff5e3]",
+  goal: "bg-[color-mix(in_srgb,var(--violet)_13%,var(--surface))] text-violet",
+  summary: "bg-[color-mix(in_srgb,var(--warn)_16%,var(--surface))] text-warn",
+  tool: "bg-[var(--glass2)] text-ink2",
+  llm: "bg-[color-mix(in_srgb,var(--violet)_12%,var(--surface))] text-violet",
+  artifact: "bg-[color-mix(in_srgb,var(--ok)_13%,var(--surface))] text-ok",
 };
 
 export function ContextPage() {
@@ -44,7 +44,7 @@ export function ContextPage() {
             </span>
           </div>
           <div className="relative pl-6">
-            <div className="absolute bottom-1 left-[7px] top-1 w-0.5 bg-gradient-to-b from-violet to-teal opacity-40" />
+            <div className="absolute bottom-1 left-[7px] top-1 w-0.5 bg-violet opacity-40" />
             {ctx.ledger.map((e) => (
               <LedgerEntry key={e.id} entry={e} />
             ))}
@@ -54,12 +54,12 @@ export function ContextPage() {
         {/* right rail */}
         <div className="overflow-auto p-5">
           <GlassCard className="mb-4 p-[18px]">
-            <h3 className="mb-3.5 text-[11px] font-bold uppercase tracking-wide text-mut">
+            <h3 className="mb-3.5 text-[11px] font-semibold uppercase tracking-[.88px] text-mut">
               Current context pack
             </h3>
-            <div className="mb-2 h-3 overflow-hidden rounded-md bg-white/[0.08]">
+            <div className="mb-2 h-3 overflow-hidden rounded-md bg-[var(--glass2)]">
               <div
-                className="h-full bg-gradient-to-r from-violet to-teal"
+                className="h-full bg-violet"
                 style={{ width: `${packPct}%` }}
               />
             </div>
@@ -75,7 +75,7 @@ export function ContextPage() {
           </GlassCard>
 
           <GlassCard className="mb-4 p-[18px]">
-            <h3 className="mb-2.5 text-[11px] font-bold uppercase tracking-wide text-mut">
+            <h3 className="mb-2.5 text-[11px] font-semibold uppercase tracking-[.88px] text-mut">
               Compaction
             </h3>
             <p className="text-[13px] leading-relaxed text-ink2">
@@ -88,8 +88,8 @@ export function ContextPage() {
             className={cn(
               "flex gap-2.5 rounded-2xl border p-3.5 text-[12.5px] leading-relaxed",
               ctx.pack.overflow
-                ? "border-[rgba(255,107,154,.4)] bg-[rgba(255,107,154,.1)] text-[#ffd0e0]"
-                : "border-[rgba(255,209,102,.25)] bg-[rgba(255,209,102,.07)] text-ink2",
+                ? "border-[color-mix(in_srgb,var(--bad)_42%,var(--line))] bg-[color-mix(in_srgb,var(--bad)_10%,var(--surface))] text-bad"
+                : "border-[color-mix(in_srgb,var(--warn)_28%,var(--line))] bg-[color-mix(in_srgb,var(--warn)_9%,var(--surface))] text-ink2",
             )}
           >
             <span className="text-warn">⚠</span>

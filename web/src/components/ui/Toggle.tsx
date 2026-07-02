@@ -18,16 +18,14 @@ export function Toggle({ checked, onChange, label, disabled }: ToggleProps) {
       onClick={() => !disabled && onChange(!checked)}
       className={cn(
         "relative h-6 w-11 shrink-0 rounded-full border transition-colors",
-        checked
-          ? "border-transparent bg-gradient-to-r from-violet to-teal"
-          : "border-[var(--line2)] bg-[var(--glass2)]",
+        checked ? "border-transparent bg-violet" : "border-[var(--line2)] bg-[var(--glass2)]",
         disabled && "opacity-50",
       )}
     >
       <span
         className={cn(
-          "absolute top-0.5 size-5 rounded-full bg-ink2 transition-all",
-          checked ? "left-[22px] bg-white" : "left-0.5",
+          "absolute top-0.5 size-5 rounded-full bg-white shadow-[0_1px_2px_rgba(38,37,30,.25)] transition-all",
+          checked ? "left-[22px]" : "left-0.5 bg-[var(--mut-soft)]",
         )}
       />
     </button>

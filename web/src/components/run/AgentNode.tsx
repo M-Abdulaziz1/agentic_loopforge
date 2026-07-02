@@ -10,8 +10,8 @@ const GLYPH: Record<string, string> = {
 };
 
 const STATUS_PILL: Record<AgentNodeData["status"], string> = {
-  running: "bg-[rgba(138,108,255,.32)] text-[#e3daff]",
-  done: "bg-[rgba(70,227,173,.2)] text-[#bff5e3]",
+  running: "bg-[color-mix(in_srgb,var(--violet)_16%,var(--surface))] text-violet",
+  done: "bg-[color-mix(in_srgb,var(--ok)_14%,var(--surface))] text-ok",
   idle: "bg-[var(--glass2)] text-mut",
 };
 
@@ -20,24 +20,24 @@ export function AgentNode({ data }: NodeProps<AgentNodeData>) {
   return (
     <div
       className={cn(
-        "w-[212px] rounded-2xl border bg-gradient-to-b from-white/[0.07] to-white/[0.03] p-3.5 backdrop-blur-md transition",
+        "w-[212px] rounded-xl border bg-[var(--surface)] p-3.5 transition",
         selected
-          ? "border-teal shadow-[0_0_0_1.5px_var(--teal),0_0_40px_rgba(74,214,255,.4)]"
+          ? "border-violet shadow-[0_0_0_1px_var(--violet)]"
           : status === "running"
-            ? "border-[#cdbcff] shadow-[0_0_0_1px_rgba(205,188,255,.5),0_0_36px_rgba(138,108,255,.45)]"
+            ? "border-[color-mix(in_srgb,var(--tl-think)_60%,var(--line))]"
             : "border-[var(--line2)]",
       )}
     >
-      <Handle type="target" position={Position.Left} className="!size-2 !border-teal !bg-bg0" />
+      <Handle type="target" position={Position.Left} className="!size-2 !border-violet !bg-surface" />
       <div className="mb-2.5 flex items-center gap-2.5">
         <div
           className={cn(
             "grid size-9 place-items-center rounded-xl text-base",
             status === "done"
-              ? "bg-[rgba(70,227,173,.22)] text-ok"
+              ? "bg-[color-mix(in_srgb,var(--ok)_15%,var(--surface))] text-ok"
               : status === "idle"
                 ? "bg-[var(--glass2)] text-mut"
-                : "bg-gradient-to-br from-[rgba(138,108,255,.55)] to-[rgba(74,214,255,.42)]",
+                : "bg-violet text-white",
             status === "running" && "animate-pulse",
           )}
         >
@@ -60,13 +60,13 @@ export function AgentNode({ data }: NodeProps<AgentNodeData>) {
         {tools.map((t) => (
           <span
             key={t}
-            className="rounded-md border border-[rgba(74,214,255,.25)] bg-[rgba(74,214,255,.15)] px-2 py-0.5 text-[10px] text-[#c4eeff]"
+            className="rounded-md border border-[var(--line2)] bg-[var(--glass2)] px-2 py-0.5 text-[10px] text-ink2"
           >
             {t}
           </span>
         ))}
       </div>
-      <Handle type="source" position={Position.Right} className="!size-2 !border-teal !bg-bg0" />
+      <Handle type="source" position={Position.Right} className="!size-2 !border-violet !bg-surface" />
     </div>
   );
 }

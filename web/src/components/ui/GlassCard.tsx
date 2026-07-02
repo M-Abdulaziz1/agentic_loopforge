@@ -5,7 +5,7 @@ export function GlassCard({ className, ...props }: HTMLAttributes<HTMLDivElement
   return (
     <div
       className={cn(
-        "rounded-2xl border border-[var(--line)] bg-[var(--glass)] p-5 backdrop-blur-md",
+        "rounded-xl border border-[var(--line)] bg-[var(--surface)] p-5",
         className,
       )}
       {...props}

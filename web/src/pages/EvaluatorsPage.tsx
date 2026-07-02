@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { GlassCard } from "../components/ui/GlassCard";
+import { Button } from "../components/ui/Button";
+import { Select } from "../components/ui/Field";
 import {
   useCreateEvaluator,
   useDeleteEvaluator,
@@ -59,7 +61,7 @@ export function EvaluatorsPage() {
   return (
     <div className="flex min-h-screen flex-col">
       <div className="flex items-center gap-4 border-b border-[var(--line)] px-7 py-4">
-        <h1 className="text-base font-bold text-ink">Evaluators</h1>
+        <h1 className="font-display text-[28px] leading-none text-ink">Evaluators</h1>
         <span className="text-[12px] text-mut">
           the frozen success metric a loop optimizes toward
         </span>
@@ -95,19 +97,16 @@ export function EvaluatorsPage() {
               <Input value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
             </Field>
             <Field label="Kind">
-              <select
+              <Select
                 aria-label="Kind"
                 value={form.kind}
-                onChange={(e) =>
-                  setForm({ ...form, kind: e.target.value as EvaluatorKind })
-                }
-                className="w-full rounded-lg border border-[var(--line2)] bg-[var(--glass2)] px-3 py-2 text-[13px] text-ink"
+                onChange={(e) => setForm({ ...form, kind: e.target.value as EvaluatorKind })}
               >
-                <option className="bg-bg0" value="statistical_insight">statistical_insight</option>
-                <option className="bg-bg0" value="ml_baseline">ml_baseline</option>
-                <option className="bg-bg0" value="custom_metric">custom_metric</option>
-                <option className="bg-bg0" value="llm_rubric">llm_rubric</option>
-              </select>
+                <option className="bg-surface text-ink" value="statistical_insight">statistical_insight</option>
+                <option className="bg-surface text-ink" value="ml_baseline">ml_baseline</option>
+                <option className="bg-surface text-ink" value="custom_metric">custom_metric</option>
+                <option className="bg-surface text-ink" value="llm_rubric">llm_rubric</option>
+              </Select>
               <p className="mt-1.5 text-[11px] leading-relaxed text-mut">
                 {KIND_BLURB[form.kind]}
               </p>
@@ -122,17 +121,14 @@ export function EvaluatorsPage() {
                   />
                 </Field>
                 <Field label="Direction">
-                  <select
+                  <Select
                     aria-label="Direction"
                     value={form.direction}
-                    onChange={(e) =>
-                      setForm({ ...form, direction: e.target.value as EvaluatorDirection })
-                    }
-                    className="w-full rounded-lg border border-[var(--line2)] bg-[var(--glass2)] px-3 py-2 text-[13px] text-ink"
+                    onChange={(e) => setForm({ ...form, direction: e.target.value as EvaluatorDirection })}
                   >
-                    <option className="bg-bg0" value="maximize">maximize</option>
-                    <option className="bg-bg0" value="minimize">minimize</option>
-                  </select>
+                    <option className="bg-surface text-ink" value="maximize">maximize</option>
+                    <option className="bg-surface text-ink" value="minimize">minimize</option>
+                  </Select>
                 </Field>
                 <Field label="Target (optional)">
                   <Input
@@ -148,17 +144,13 @@ export function EvaluatorsPage() {
                 type="checkbox"
                 checked={form.is_default}
                 onChange={(e) => setForm({ ...form, is_default: e.target.checked })}
+                className="size-4 accent-[var(--violet)]"
               />
               Set as default
             </label>
-            <button
-              type="button"
-              onClick={submit}
-              disabled={create.isPending || !form.name}
-              className="w-full rounded-xl bg-gradient-to-br from-violet to-teal px-4 py-2.5 text-[13px] font-bold text-white disabled:opacity-50"
-            >
+            <Button className="w-full" onClick={submit} disabled={!form.name} loading={create.isPending}>
               Add evaluator
-            </button>
+            </Button>
           </GlassCard>
         </div>
       </div>
@@ -175,7 +167,7 @@ function EvaluatorRow({ evaluator }: { evaluator: Evaluator }) {
       <div className="flex items-center gap-2">
         <span className="text-[15px] font-bold">{evaluator.name}</span>
         {evaluator.is_default ? (
-          <span className="rounded-md bg-[rgba(70,227,173,.14)] px-2 py-0.5 text-[11px] font-bold text-[#9af3d4]">
+          <span className="rounded-md bg-[color-mix(in_srgb,var(--ok)_12%,var(--surface))] px-2 py-0.5 text-[11px] font-bold text-ok">
             default
           </span>
         ) : null}
@@ -192,22 +184,19 @@ function EvaluatorRow({ evaluator }: { evaluator: Evaluator }) {
       </div>
       <div className="mt-3 flex gap-2">
         {!evaluator.is_default ? (
-          <button
-            type="button"
-            onClick={() => update.mutate({ is_default: true })}
-            className="rounded-lg border border-[var(--line2)] bg-[var(--glass2)] px-3 py-1.5 text-[12px] font-semibold"
-          >
+          <Button variant="secondary" size="sm" onClick={() => update.mutate({ is_default: true })}>
             Set default
-          </button>
+          </Button>
         ) : null}
-        <button
-          type="button"
+        <Button
+          variant="danger"
+          size="sm"
+          className="ml-auto"
           onClick={() => del.mutate(evaluator.id)}
-          disabled={del.isPending}
-          className="ml-auto rounded-lg border border-[rgba(255,107,154,.35)] bg-[rgba(255,107,154,.12)] px-3 py-1.5 text-[12px] font-semibold text-[#ffd0e0]"
+          loading={del.isPending}
         >
           Delete
-        </button>
+        </Button>
       </div>
     </GlassCard>
   );
@@ -216,7 +205,7 @@ function EvaluatorRow({ evaluator }: { evaluator: Evaluator }) {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="mb-3">
-      <div className="mb-1.5 text-[10px] font-bold tracking-[.6px] text-mut">{label}</div>
+      <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-[.88px] text-mut">{label}</div>
       {children}
     </div>
   );
@@ -237,7 +226,7 @@ function Input({
       value={value}
       placeholder={placeholder}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded-lg border border-[var(--line2)] bg-white/[0.03] px-3 py-2 text-[13px] text-ink outline-none focus:border-[#cdbcff]"
+      className="h-11 w-full rounded-lg border border-[var(--line2)] bg-[var(--surface)] px-3.5 text-[14px] text-ink placeholder:text-[var(--mut-soft)] outline-none transition focus:border-[var(--violet)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--violet)_22%,transparent)]"
     />
   );
 }

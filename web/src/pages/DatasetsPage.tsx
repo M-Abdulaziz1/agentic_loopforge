@@ -1,6 +1,8 @@
 import { useRef, useState } from "react";
 import { GlassCard } from "../components/ui/GlassCard";
-import { cn } from "../lib/cn";
+import { Button } from "../components/ui/Button";
+import { Badge } from "../components/ui/Badge";
+import { Input } from "../components/ui/Field";
 import {
   useDatasets,
   useDeleteDataset,
@@ -9,11 +11,12 @@ import {
 } from "../lib/api/datasets";
 import type { Dataset, DatasetStatus } from "../lib/api/types";
 
-const STATUS_STYLE: Record<DatasetStatus, string> = {
-  ready: "bg-[rgba(70,227,173,.14)] text-[#9af3d4]",
-  profiling: "bg-[rgba(138,108,255,.2)] text-[#dcd0ff]",
-  uploaded: "bg-[rgba(255,209,102,.15)] text-[#ffe2a0]",
-  failed: "bg-[rgba(255,107,154,.14)] text-[#ffd0e0]",
+type BadgeTone = "neutral" | "brand" | "ok" | "warn" | "bad";
+const STATUS_TONE: Record<DatasetStatus, BadgeTone> = {
+  ready: "ok",
+  profiling: "brand",
+  uploaded: "warn",
+  failed: "bad",
 };
 
 function fmtSize(bytes: number): string {
@@ -46,7 +49,7 @@ export function DatasetsPage() {
   return (
     <div className="flex min-h-screen flex-col">
       <div className="flex items-center gap-4 border-b border-[var(--line)] px-7 py-4">
-        <h1 className="text-base font-bold text-ink">Datasets</h1>
+        <h1 className="font-display text-[28px] leading-none text-ink">Datasets</h1>
       </div>
 
       <div className="flex-1 overflow-auto p-7">
@@ -86,30 +89,25 @@ export function DatasetsPage() {
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
               className="mb-3 w-full text-[12px] text-ink2 file:mr-3 file:rounded-lg file:border-0 file:bg-[var(--glass2)] file:px-3 file:py-1.5 file:text-[12px] file:font-semibold file:text-ink"
             />
-            <div className="mb-1.5 text-[10px] font-bold tracking-[.6px] text-mut">
+            <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-[.88px] text-mut">
               Display name (optional)
             </div>
-            <input
+            <Input
               type="text"
               aria-label="Display name"
               value={name}
               placeholder={file?.name ?? "customers_q2"}
               onChange={(e) => setName(e.target.value)}
-              className="mb-3 w-full rounded-lg border border-[var(--line2)] bg-white/[0.03] px-3 py-2 text-[13px] text-ink outline-none focus:border-[#cdbcff]"
+              className="mb-3"
             />
             {upload.isError ? (
-              <div className="mb-3 rounded-lg bg-[rgba(255,107,154,.12)] px-3 py-1.5 text-[12px] text-[#ffd0e0]">
+              <div className="mb-3 rounded-lg bg-[color-mix(in_srgb,var(--bad)_11%,var(--surface))] px-3 py-1.5 text-[12px] text-bad">
                 {datasetUploadErrorMessage(upload.error)}
               </div>
             ) : null}
-            <button
-              type="button"
-              onClick={submit}
-              disabled={!file || upload.isPending}
-              className="w-full rounded-xl bg-gradient-to-br from-violet to-teal px-4 py-2.5 text-[13px] font-bold text-white disabled:opacity-50"
-            >
+            <Button className="w-full" onClick={submit} disabled={!file} loading={upload.isPending}>
               {upload.isPending ? "Uploading…" : "Upload dataset"}
-            </button>
+            </Button>
           </GlassCard>
         </div>
       </div>
@@ -125,15 +123,8 @@ function DatasetRow({ dataset }: { dataset: Dataset }) {
   return (
     <GlassCard>
       <div className="flex items-center gap-2">
-        <span className="text-[15px] font-bold">{dataset.name}</span>
-        <span
-          className={cn(
-            "rounded-md px-2 py-0.5 text-[11px] font-bold",
-            STATUS_STYLE[dataset.status],
-          )}
-        >
-          {dataset.status}
-        </span>
+        <span className="text-[15px] font-semibold text-ink">{dataset.name}</span>
+        <Badge tone={STATUS_TONE[dataset.status]}>{dataset.status}</Badge>
         <span className="ml-auto rounded-md bg-[var(--glass2)] px-2 py-0.5 text-[11px] uppercase text-mut">
           {dataset.kind}
         </span>
@@ -145,7 +136,7 @@ function DatasetRow({ dataset }: { dataset: Dataset }) {
           : ""}
       </div>
       {dataset.status === "failed" && dataset.detail ? (
-        <div className="mt-2 rounded-lg bg-[rgba(255,107,154,.12)] px-3 py-1.5 text-[12px] text-[#ffd0e0]">
+        <div className="mt-2 rounded-lg bg-[color-mix(in_srgb,var(--bad)_11%,var(--surface))] px-3 py-1.5 text-[12px] text-bad">
           {dataset.detail}
         </div>
       ) : null}
@@ -182,22 +173,19 @@ function DatasetRow({ dataset }: { dataset: Dataset }) {
 
       <div className="mt-3 flex gap-2">
         {cols.length > 0 ? (
-          <button
-            type="button"
-            onClick={() => setOpen((o) => !o)}
-            className="rounded-lg border border-[var(--line2)] bg-[var(--glass2)] px-3 py-1.5 text-[12px] font-semibold"
-          >
+          <Button variant="secondary" size="sm" onClick={() => setOpen((o) => !o)}>
             {open ? "Hide profile" : "View profile"}
-          </button>
+          </Button>
         ) : null}
-        <button
-          type="button"
+        <Button
+          variant="danger"
+          size="sm"
+          className="ml-auto"
           onClick={() => del.mutate(dataset.id)}
-          disabled={del.isPending}
-          className="ml-auto rounded-lg border border-[rgba(255,107,154,.35)] bg-[rgba(255,107,154,.12)] px-3 py-1.5 text-[12px] font-semibold text-[#ffd0e0]"
+          loading={del.isPending}
         >
           Delete
-        </button>
+        </Button>
       </div>
     </GlassCard>
   );

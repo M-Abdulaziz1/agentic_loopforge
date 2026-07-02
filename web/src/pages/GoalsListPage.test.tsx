@@ -31,6 +31,6 @@ test("New goal navigates to the create screen", async () => {
       </MemoryRouter>
     </Providers>,
   );
-  await userEvent.click(await screen.findByRole("button", { name: "+ New goal" }));
+  await userEvent.click(await screen.findByRole("button", { name: "New goal" }));
   expect(await screen.findByTestId("loc")).toHaveTextContent("/goals/new");
 });

@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { GlassCard } from "../components/ui/GlassCard";
+import { Button } from "../components/ui/Button";
+import { Select } from "../components/ui/Field";
 import { cn } from "../lib/cn";
 import {
   useCreateLlmProvider,
@@ -50,7 +52,7 @@ export function SettingsPage() {
   return (
     <div className="flex min-h-screen flex-col">
       <div className="flex items-center gap-4 border-b border-[var(--line)] px-7 py-4">
-        <h1 className="text-base font-bold text-ink">Settings · LLM Providers</h1>
+        <h1 className="font-display text-[28px] leading-none text-ink">Settings · LLM Providers</h1>
       </div>
 
       <div className="flex-1 overflow-auto p-7">
@@ -80,15 +82,14 @@ export function SettingsPage() {
               <Input value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
             </Field>
             <Field label="Kind">
-              <select
+              <Select
                 aria-label="Kind"
                 value={form.kind}
                 onChange={(e) => setForm({ ...form, kind: e.target.value as LLMProviderKind })}
-                className="w-full rounded-lg border border-[var(--line2)] bg-[var(--glass2)] px-3 py-2 text-[13px] text-ink"
               >
-                <option className="bg-bg0" value="openai_compatible">openai_compatible</option>
-                <option className="bg-bg0" value="anthropic">anthropic</option>
-              </select>
+                <option className="bg-surface text-ink" value="openai_compatible">openai_compatible</option>
+                <option className="bg-surface text-ink" value="anthropic">anthropic</option>
+              </Select>
             </Field>
             <Field label="Base URL">
               <Input
@@ -113,17 +114,18 @@ export function SettingsPage() {
                 type="checkbox"
                 checked={form.is_default}
                 onChange={(e) => setForm({ ...form, is_default: e.target.checked })}
+                className="size-4 accent-[var(--violet)]"
               />
               Set as default
             </label>
-            <button
-              type="button"
+            <Button
+              className="w-full"
               onClick={submit}
-              disabled={create.isPending || !form.name || !form.model}
-              className="w-full rounded-xl bg-gradient-to-br from-violet to-teal px-4 py-2.5 text-[13px] font-bold text-white disabled:opacity-50"
+              disabled={!form.name || !form.model}
+              loading={create.isPending}
             >
               Add provider
-            </button>
+            </Button>
           </GlassCard>
         </div>
       </div>
@@ -141,7 +143,7 @@ function ProviderRow({ provider }: { provider: LLMProvider }) {
       <div className="flex items-center gap-2">
         <span className="text-[15px] font-bold">{provider.name}</span>
         {provider.is_default ? (
-          <span className="rounded-md bg-[rgba(70,227,173,.14)] px-2 py-0.5 text-[11px] font-bold text-[#9af3d4]">
+          <span className="rounded-md bg-[color-mix(in_srgb,var(--ok)_12%,var(--surface))] px-2 py-0.5 text-[11px] font-bold text-ok">
             default
           </span>
         ) : null}
@@ -159,38 +161,25 @@ function ProviderRow({ provider }: { provider: LLMProvider }) {
           className={cn(
             "mt-2 rounded-lg px-3 py-1.5 text-[12px]",
             test.data.ok
-              ? "bg-[rgba(70,227,173,.12)] text-[#9af3d4]"
-              : "bg-[rgba(255,107,154,.12)] text-[#ffd0e0]",
+              ? "bg-[color-mix(in_srgb,var(--ok)_11%,var(--surface))] text-ok"
+              : "bg-[color-mix(in_srgb,var(--bad)_11%,var(--surface))] text-bad",
           )}
         >
           {test.data.ok ? `✓ reachable${test.data.model ? ` · ${test.data.model}` : ""}` : `✕ ${test.data.detail ?? "failed"}`}
         </div>
       ) : null}
       <div className="mt-3 flex gap-2">
-        <button
-          type="button"
-          onClick={() => test.mutate(provider.id)}
-          disabled={test.isPending}
-          className="rounded-lg border border-[var(--line2)] bg-[var(--glass2)] px-3 py-1.5 text-[12px] font-semibold"
-        >
+        <Button variant="secondary" size="sm" onClick={() => test.mutate(provider.id)} loading={test.isPending}>
           {test.isPending ? "Testing…" : "Test"}
-        </button>
+        </Button>
         {!provider.is_default ? (
-          <button
-            type="button"
-            onClick={() => update.mutate({ is_default: true })}
-            className="rounded-lg border border-[var(--line2)] bg-[var(--glass2)] px-3 py-1.5 text-[12px] font-semibold"
-          >
+          <Button variant="secondary" size="sm" onClick={() => update.mutate({ is_default: true })}>
             Set default
-          </button>
+          </Button>
         ) : null}
-        <button
-          type="button"
-          onClick={() => del.mutate(provider.id)}
-          className="ml-auto rounded-lg border border-[rgba(255,107,154,.35)] bg-[rgba(255,107,154,.12)] px-3 py-1.5 text-[12px] font-semibold text-[#ffd0e0]"
-        >
+        <Button variant="danger" size="sm" className="ml-auto" onClick={() => del.mutate(provider.id)}>
           Delete
-        </button>
+        </Button>
       </div>
     </GlassCard>
   );
@@ -199,7 +188,7 @@ function ProviderRow({ provider }: { provider: LLMProvider }) {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="mb-3">
-      <div className="mb-1.5 text-[10px] font-bold tracking-[.6px] text-mut">{label}</div>
+      <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-[.88px] text-mut">{label}</div>
       {children}
     </div>
   );
@@ -222,7 +211,7 @@ function Input({
       value={value}
       placeholder={placeholder}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded-lg border border-[var(--line2)] bg-white/[0.03] px-3 py-2 text-[13px] text-ink outline-none focus:border-[#cdbcff]"
+      className="h-11 w-full rounded-lg border border-[var(--line2)] bg-[var(--surface)] px-3.5 text-[14px] text-ink placeholder:text-[var(--mut-soft)] outline-none transition focus:border-[var(--violet)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--violet)_22%,transparent)]"
     />
   );
 }

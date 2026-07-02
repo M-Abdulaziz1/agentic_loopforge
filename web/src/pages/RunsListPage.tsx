@@ -6,12 +6,12 @@ import type { RunStatus } from "../lib/api/types";
 type Props = { title: string; to: (runId: string) => string };
 
 const STATUS: Partial<Record<RunStatus, { dot: string; text: string; bg: string }>> = {
-  running: { dot: "bg-violet shadow-[0_0_8px_var(--violet)]", text: "text-[#dcd0ff]", bg: "bg-[rgba(138,108,255,.16)]" },
-  completed: { dot: "bg-ok shadow-[0_0_8px_var(--ok)]", text: "text-[#9af3d4]", bg: "bg-[rgba(70,227,173,.14)]" },
-  pending_approval: { dot: "bg-warn shadow-[0_0_8px_var(--warn)]", text: "text-[#ffe2a0]", bg: "bg-[rgba(255,209,102,.15)]" },
-  failed: { dot: "bg-bad", text: "text-[#ffd0e0]", bg: "bg-[rgba(255,107,154,.14)]" },
+  running: { dot: "bg-violet", text: "text-violet", bg: "bg-[color-mix(in_srgb,var(--violet)_11%,var(--surface))]" },
+  completed: { dot: "bg-ok", text: "text-ok", bg: "bg-[color-mix(in_srgb,var(--ok)_12%,var(--surface))]" },
+  pending_approval: { dot: "bg-warn", text: "text-warn", bg: "bg-[color-mix(in_srgb,var(--warn)_15%,var(--surface))]" },
+  failed: { dot: "bg-bad", text: "text-bad", bg: "bg-[color-mix(in_srgb,var(--bad)_12%,var(--surface))]" },
   cancelled: { dot: "bg-mut", text: "text-mut", bg: "bg-[var(--glass2)]" },
-  budget_exhausted: { dot: "bg-bad", text: "text-[#ffd0e0]", bg: "bg-[rgba(255,107,154,.14)]" },
+  budget_exhausted: { dot: "bg-bad", text: "text-bad", bg: "bg-[color-mix(in_srgb,var(--bad)_12%,var(--surface))]" },
 };
 
 export function RunsListPage({ title, to }: Props) {
@@ -20,7 +20,7 @@ export function RunsListPage({ title, to }: Props) {
   return (
     <div className="flex min-h-screen flex-col">
       <div className="flex items-center gap-4 border-b border-[var(--line)] px-7 py-5">
-        <h1 className="text-[19px] font-extrabold tracking-tight text-ink">{title}</h1>
+        <h1 className="font-display text-[24px] leading-none text-ink">{title}</h1>
         <span className="rounded-full bg-[var(--glass2)] px-2.5 py-0.5 font-mono text-[12px] text-ink2">
           {runs.length}
         </span>
@@ -30,7 +30,7 @@ export function RunsListPage({ title, to }: Props) {
           <div className="text-mut">Loading runs…</div>
         ) : runs.length === 0 ? (
           <div className="grid place-items-center py-24 text-center text-mut">
-            <div className="text-lg font-bold text-ink2">No runs yet</div>
+            <div className="font-display text-[22px] text-ink">No runs yet</div>
             <p className="mt-1.5 max-w-sm text-sm">
               Approve a loop spec and start a run to watch the agents execute here.
             </p>
@@ -41,7 +41,7 @@ export function RunsListPage({ title, to }: Props) {
               const s = STATUS[r.status] ?? { dot: "bg-mut", text: "text-ink2", bg: "bg-[var(--glass2)]" };
               return (
                 <Link key={r.id} to={to(r.id)} className="lf-rise" style={{ animationDelay: `${i * 40}ms` }}>
-                  <div className="group h-full rounded-2xl border border-[var(--line)] bg-[var(--glass)] p-5 backdrop-blur-md transition hover:-translate-y-0.5 hover:border-[var(--line2)] hover:shadow-[0_18px_44px_rgba(138,108,255,.16)]">
+                  <div className="group h-full rounded-xl border border-[var(--line)] bg-[var(--surface)] p-5 transition hover:-translate-y-0.5 hover:border-[var(--line2)]">
                     <div className="mb-3 flex items-center gap-2">
                       <span className="font-mono text-[13px] font-bold text-ink">{r.id}</span>
                       <span

@@ -21,14 +21,14 @@ export function ResultsPage() {
         <div className="text-sm text-mut">
           Results / <b className="text-ink">{runId}</b>
         </div>
-        <span className="ml-auto flex items-center gap-2 rounded-full border border-[rgba(70,227,173,.3)] bg-[rgba(70,227,173,.1)] px-3 py-1 text-[12px] font-bold text-[#9af3d4]">
+        <span className="ml-auto flex items-center gap-2 rounded-full border border-[color-mix(in_srgb,var(--ok)_32%,var(--line))] bg-[color-mix(in_srgb,var(--ok)_10%,var(--surface))] px-3 py-1 text-[12px] font-bold text-ok">
           ● {results.status}
         </span>
       </div>
 
       <div className="flex-1 overflow-auto px-8 py-7">
         <div className="mx-auto max-w-[960px]">
-          <h1 className="text-2xl font-extrabold tracking-tight">Validated results</h1>
+          <h1 className="font-display text-[32px] leading-none">Validated results</h1>
           <p className="mb-6 mt-1 text-sm text-mut">
             Only findings that cleared significance + effect-size thresholds (with
             multiple-comparison correction) appear here.
@@ -43,7 +43,7 @@ export function ResultsPage() {
 
           {empty ? (
             <GlassCard className="py-12 text-center">
-              <div className="text-lg font-bold">No validated findings</div>
+              <div className="font-display text-[22px] text-ink">No validated findings</div>
               <p className="mx-auto mt-2 max-w-md text-sm text-mut">
                 Nothing passed statistical validation for this run
                 (<span className="font-mono">completed_no_findings</span>). That's an honest
@@ -89,12 +89,12 @@ function InsightCard({ insight }: { insight: InsightResult }) {
   return (
     <GlassCard className="mb-3.5">
       <div className="mb-3 flex items-center gap-3">
-        <div className="grid size-[30px] place-items-center rounded-lg bg-gradient-to-br from-violet to-teal text-sm font-extrabold">
+        <div className="grid size-[30px] place-items-center rounded-lg bg-violet text-sm font-extrabold">
           {insight.rank}
         </div>
-        <div className="text-base font-bold">{insight.claim}</div>
+        <div className="font-display text-[18px] text-ink">{insight.claim}</div>
         {insight.passed ? (
-          <span className="ml-auto rounded-md border border-[rgba(70,227,173,.3)] bg-[rgba(70,227,173,.12)] px-2 py-0.5 text-[11px] font-bold text-[#9af3d4]">
+          <span className="ml-auto rounded-md border border-[color-mix(in_srgb,var(--ok)_32%,var(--line))] bg-[color-mix(in_srgb,var(--ok)_11%,var(--surface))] px-2 py-0.5 text-[11px] font-bold text-ok">
             ✓ PASSED
           </span>
         ) : null}
@@ -120,12 +120,12 @@ function ModelCard({ model }: { model: ModelResult }) {
   return (
     <GlassCard className="mb-3.5">
       <div className="mb-2 flex items-center gap-3">
-        <div className="text-base font-bold">{model.name}</div>
+        <div className="font-display text-[18px] text-ink">{model.name}</div>
         <span
           className={`ml-auto rounded-md px-2 py-0.5 text-[11px] font-bold ${
             model.beats_baseline
-              ? "border border-[rgba(70,227,173,.3)] bg-[rgba(70,227,173,.12)] text-[#9af3d4]"
-              : "border border-[rgba(255,107,154,.3)] bg-[rgba(255,107,154,.12)] text-[#ffb9d2]"
+              ? "border border-[color-mix(in_srgb,var(--ok)_32%,var(--line))] bg-[color-mix(in_srgb,var(--ok)_11%,var(--surface))] text-ok"
+              : "border border-[color-mix(in_srgb,var(--bad)_32%,var(--line))] bg-[color-mix(in_srgb,var(--bad)_11%,var(--surface))] text-bad"
           }`}
         >
           {model.beats_baseline ? "✓ beats baseline" : "✕ below baseline"}
@@ -152,7 +152,7 @@ function ArtifactRow({ artifact, onView }: { artifact: Artifact; onView: () => v
       <button
         type="button"
         onClick={onView}
-        className="ml-auto rounded-lg border border-[rgba(74,214,255,.25)] bg-[rgba(74,214,255,.1)] px-3 py-1.5 text-[12px] font-semibold text-teal"
+        className="ml-auto rounded-lg border border-[var(--line2)] bg-[var(--glass2)] px-3 py-1.5 text-[12px] font-semibold text-teal"
       >
         View / extract
       </button>
@@ -171,14 +171,14 @@ function Tile({ k, v }: { k: string; v: string }) {
   return (
     <GlassCard className="p-4">
       <div className="text-[11px] tracking-[.4px] text-mut">{k}</div>
-      <div className="mt-1 text-2xl font-extrabold">{v}</div>
+      <div className="mt-1 font-mono text-[24px] font-medium text-ink">{v}</div>
     </GlassCard>
   );
 }
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <span className="rounded-lg border border-[var(--line)] bg-[var(--glass2)] px-2.5 py-1.5 text-[12px] text-ink2">
-      {label} <b className="text-white">{value}</b>
+      {label} <b className="font-mono font-medium text-ink">{value}</b>
     </span>
   );
 }
@@ -186,7 +186,7 @@ function Drill({ children }: { children: React.ReactNode }) {
   return (
     <button
       type="button"
-      className="rounded-lg border border-[rgba(74,214,255,.25)] bg-[rgba(74,214,255,.1)] px-2.5 py-1.5 text-[12px] font-semibold text-teal"
+      className="rounded-lg border border-[var(--line2)] bg-[var(--glass2)] px-2.5 py-1.5 text-[12px] font-semibold text-teal"
     >
       {children}
     </button>

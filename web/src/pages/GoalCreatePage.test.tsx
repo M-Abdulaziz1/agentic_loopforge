@@ -69,7 +69,7 @@ test("uploads a dataset from the goal setup flow and uses it on submit", async (
     screen.getByLabelText("Upload dataset file"),
     new File(["amount\n1\n"], "transactions.csv", { type: "text/csv" }),
   );
-  await userEvent.click(screen.getByRole("button", { name: "Upload & use dataset" }));
+  await userEvent.click(screen.getByRole("button", { name: "Upload & use" }));
 
   expect(await screen.findByText(/Using customers_q2/)).toBeInTheDocument();
 
