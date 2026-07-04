@@ -33,12 +33,15 @@ export function GoalsListPage() {
         {isLoading ? (
           <div className="text-mut">Loading goals…</div>
         ) : goals.length === 0 ? (
-          <div className="grid place-items-center py-24 text-center">
-            <div className="font-display text-[26px] text-ink">No goals yet</div>
-            <p className="mt-2.5 max-w-sm text-[15px] leading-relaxed text-mut">
+          <div className="lf-mesh relative grid place-items-center overflow-hidden rounded-2xl border border-[var(--line)] py-28 text-center">
+            <div className="lf-eyebrow">LoopForge</div>
+            <div className="mt-3 font-display text-[40px] leading-none tracking-[-0.03em] text-ink">
+              No goals yet
+            </div>
+            <p className="mt-3 max-w-md text-[15px] leading-relaxed text-ink2">
               Describe an end goal and LoopForge will turn it into a guarded agent loop.
             </p>
-            <Button className="mt-6" size="lg" onClick={() => navigate("/goals/new")}>
+            <Button className="mt-7" size="lg" onClick={() => navigate("/goals/new")}>
               Create your first goal
             </Button>
           </div>

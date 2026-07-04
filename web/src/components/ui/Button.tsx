@@ -11,24 +11,24 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 /*
- * The single button primitive. Every CTA in the app routes through here so
- * weight, radius, padding, hover/active/focus/disabled states stay identical —
- * the Cursor system's discipline (8px radius, medium weight, hairline depth,
- * one orange voltage) enforced in one place instead of 58 inline variations.
+ * The single button primitive. Every CTA routes through here so weight, radius,
+ * padding, and hover/active/focus/disabled states stay identical. Vercel's app
+ * dialect: a tight 6px square, ink-black primary, white-hairline secondary, and
+ * the accent blue for positive actions — enforced once, not per call site.
  */
 const BASE =
-  "inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-lg font-medium " +
+  "inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium " +
   "transition duration-150 active:translate-y-px disabled:pointer-events-none disabled:opacity-45";
 
 const VARIANT: Record<Variant, string> = {
-  primary: "bg-violet text-white hover:bg-[var(--teal)]",
+  primary: "bg-ink text-[var(--on-ink)] hover:bg-[var(--ink-hover)]",
   secondary:
-    "border border-[var(--line2)] bg-[var(--surface)] text-ink hover:border-[var(--mut)] hover:bg-[var(--canvas-soft)]",
+    "border border-[var(--line2)] bg-[var(--surface)] text-ink hover:bg-[var(--canvas-soft)]",
   ghost: "text-ink2 hover:bg-[var(--glass2)] hover:text-ink",
   danger:
-    "border border-[color-mix(in_srgb,var(--bad)_38%,var(--line))] bg-[color-mix(in_srgb,var(--bad)_10%,var(--surface))] " +
-    "text-bad hover:bg-[color-mix(in_srgb,var(--bad)_17%,var(--surface))]",
-  success: "bg-ok text-white hover:brightness-[0.94]",
+    "border border-[color-mix(in_srgb,var(--bad)_28%,var(--line))] bg-[var(--surface)] " +
+    "text-bad hover:bg-[color-mix(in_srgb,var(--bad)_8%,var(--surface))] hover:border-[color-mix(in_srgb,var(--bad)_45%,var(--line))]",
+  success: "bg-accent text-white hover:bg-[var(--accent-deep)]",
 };
 
 const SIZE: Record<Size, string> = {

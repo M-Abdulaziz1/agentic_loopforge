@@ -101,19 +101,19 @@ const DOT: Record<AgentStatus, string> = {
   done: "bg-tl-done",
 };
 
-/* Pastel stage-pill styling (Cursor timeline signature). */
-const STAGE_PILL: Record<AgentStatus, string> = {
-  idle: "bg-[var(--surface-strong)] text-mut",
-  running: "bg-tl-think text-ink",
-  done: "bg-tl-done text-white",
+/* Stage chip label color (Vercel: ink/blue/grey text on a hairline pill). */
+const STAGE_TEXT: Record<AgentStatus, string> = {
+  idle: "text-mut",
+  running: "text-accent",
+  done: "text-ink",
 };
 
 /* Card top accent bar per stage. */
 const ACCENT: Record<AgentStatus, string> = {
   idle: "bg-[var(--surface-strong)]",
   running:
-    "bg-gradient-to-r from-tl-think via-tl-edit to-tl-think [background-size:200%_100%] [animation:lf-shimmer_1.6s_linear_infinite]",
-  done: "bg-tl-done",
+    "bg-gradient-to-r from-[var(--accent)] via-[color-mix(in_srgb,var(--accent)_40%,#ffffff)] to-[var(--accent)] [background-size:200%_100%] [animation:lf-shimmer_1.6s_linear_infinite]",
+  done: "bg-ink",
 };
 
 function AgentModule({
@@ -142,9 +142,9 @@ function AgentModule({
       className={cn(
         "lf-rise group relative flex flex-col overflow-hidden rounded-xl border bg-[var(--surface)] p-5 text-left transition duration-200",
         selected
-          ? "border-violet shadow-[0_0_0_1px_var(--violet)]"
+          ? "border-accent shadow-[0_0_0_1px_var(--accent)]"
           : status === "running"
-            ? "border-[color-mix(in_srgb,var(--tl-think)_60%,var(--line))] hover:-translate-y-0.5"
+            ? "border-[color-mix(in_srgb,var(--accent)_45%,var(--line))] hover:-translate-y-0.5"
             : "border-[var(--line)] hover:-translate-y-0.5 hover:border-[var(--line2)]",
       )}
     >
@@ -194,7 +194,7 @@ function AgentModule({
           <span className={cn("size-1.5 rounded-full", DOT[status])} />
           {activity > 0 ? `${activity} event${activity === 1 ? "" : "s"}` : "no activity"}
         </span>
-        <span className="ml-auto font-medium text-mut transition group-hover:text-violet">
+        <span className="ml-auto font-medium text-mut transition group-hover:text-accent">
           Inspect →
         </span>
       </div>
@@ -207,18 +207,18 @@ function Tile({ name, status }: { name: string; status: AgentStatus }) {
     <div className="relative grid size-12 shrink-0 place-items-center">
       <div
         className={cn(
-          "grid size-12 place-items-center rounded-lg border font-display text-[16px] transition",
+          "grid size-12 place-items-center rounded-md border font-display text-[16px] transition",
           status === "done"
-            ? "border-transparent bg-tl-done text-white"
+            ? "border-transparent bg-ink text-[var(--on-ink)]"
             : status === "running"
-              ? "border-transparent bg-tl-think text-ink"
+              ? "border-transparent bg-accent text-white"
               : "border-[var(--line)] bg-[var(--canvas-soft)] text-mut",
         )}
       >
         {monogram(name)}
       </div>
       {status === "done" ? (
-        <span className="absolute -bottom-1 -right-1 grid size-[18px] place-items-center rounded-full border border-[var(--bg0)] bg-tl-done text-[10px] font-bold text-white">
+        <span className="absolute -bottom-1 -right-1 grid size-[18px] place-items-center rounded-full border border-[var(--bg0)] bg-ink text-[10px] font-bold text-[var(--on-ink)]">
           ✓
         </span>
       ) : null}
@@ -230,10 +230,11 @@ function StageTag({ status }: { status: AgentStatus }) {
   return (
     <span
       className={cn(
-        "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[.6px]",
-        STAGE_PILL[status],
+        "inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface)] px-2 py-0.5 text-[11px] font-medium",
+        STAGE_TEXT[status],
       )}
     >
+      <span className={cn("size-1.5 rounded-full", DOT[status])} />
       {STAGE_LABEL[status]}
     </span>
   );

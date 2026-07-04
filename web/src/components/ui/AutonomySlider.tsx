@@ -54,7 +54,7 @@ export function AutonomySlider({
               className={cn(
                 "absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 transition",
                 active
-                  ? "border-white bg-violet shadow-[0_1px_3px_rgba(38,37,30,.3)]"
+                  ? "border-white bg-ink shadow-[0_1px_3px_rgba(23,23,23,.25)]"
                   : "border-[var(--line2)] bg-surface",
               )}
             />
@@ -79,7 +79,7 @@ export function AutonomySlider({
       </div>
 
       <div className="mt-3 flex items-center gap-2.5 rounded-lg border border-[var(--line)] bg-[var(--canvas-soft)] p-3">
-        <span className="rounded-md bg-[rgba(245,78,0,.1)] px-2 py-0.5 text-[11px] font-semibold text-violet">
+        <span className="rounded-md border border-[var(--line)] bg-[var(--accent-soft)] px-2 py-0.5 text-[11px] font-medium text-[var(--accent-deep)]">
           {meta.leash}
         </span>
         <span className="text-[12.5px] text-mut">{meta.blurb}</span>

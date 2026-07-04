@@ -45,19 +45,19 @@ export function AgentCanvas({ agents, handoffs, view, selectedId, onSelect }: Pr
         <svg style={{ position: "absolute", width: 0, height: 0 }}>
           <defs>
             <linearGradient id="lf-edge" x1="0" x2="1">
-              <stop offset="0" stopColor="#f54e00" />
-              <stop offset="1" stopColor="#d04200" />
+              <stop offset="0" stopColor="#171717" />
+              <stop offset="1" stopColor="#0070f3" />
             </linearGradient>
           </defs>
         </svg>
-        <Background variant={BackgroundVariant.Dots} gap={26} size={1.1} color="rgba(38,37,30,0.13)" />
+        <Background variant={BackgroundVariant.Dots} gap={26} size={1.1} color="rgba(23,23,23,0.12)" />
         <Controls showInteractive={false} />
         <MiniMap
           pannable
           zoomable
-          maskColor="rgba(38,37,30,.08)"
-          style={{ background: "#fafaf7", border: "1px solid rgba(38,37,30,.11)" }}
-          nodeColor="#f54e00"
+          maskColor="rgba(23,23,23,.06)"
+          style={{ background: "#ffffff", border: "1px solid #ebebeb" }}
+          nodeColor="#171717"
         />
       </ReactFlow>
     </div>

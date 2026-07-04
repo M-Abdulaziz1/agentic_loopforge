@@ -10,9 +10,9 @@ const GLYPH: Record<string, string> = {
 };
 
 const STATUS_PILL: Record<AgentNodeData["status"], string> = {
-  running: "bg-[color-mix(in_srgb,var(--violet)_16%,var(--surface))] text-violet",
-  done: "bg-[color-mix(in_srgb,var(--ok)_14%,var(--surface))] text-ok",
-  idle: "bg-[var(--glass2)] text-mut",
+  running: "border border-[var(--line)] bg-[var(--surface)] text-accent",
+  done: "border border-[var(--line)] bg-[var(--surface)] text-ink",
+  idle: "border border-[var(--line)] bg-[var(--surface)] text-mut",
 };
 
 export function AgentNode({ data }: NodeProps<AgentNodeData>) {
@@ -22,22 +22,22 @@ export function AgentNode({ data }: NodeProps<AgentNodeData>) {
       className={cn(
         "w-[212px] rounded-xl border bg-[var(--surface)] p-3.5 transition",
         selected
-          ? "border-violet shadow-[0_0_0_1px_var(--violet)]"
+          ? "border-accent shadow-[0_0_0_1px_var(--accent)]"
           : status === "running"
-            ? "border-[color-mix(in_srgb,var(--tl-think)_60%,var(--line))]"
+            ? "border-[color-mix(in_srgb,var(--accent)_45%,var(--line))]"
             : "border-[var(--line2)]",
       )}
     >
-      <Handle type="target" position={Position.Left} className="!size-2 !border-violet !bg-surface" />
+      <Handle type="target" position={Position.Left} className="!size-2 !border-accent !bg-surface" />
       <div className="mb-2.5 flex items-center gap-2.5">
         <div
           className={cn(
-            "grid size-9 place-items-center rounded-xl text-base",
+            "grid size-9 place-items-center rounded-md text-base",
             status === "done"
-              ? "bg-[color-mix(in_srgb,var(--ok)_15%,var(--surface))] text-ok"
+              ? "bg-ink text-[var(--on-ink)]"
               : status === "idle"
                 ? "bg-[var(--glass2)] text-mut"
-                : "bg-violet text-white",
+                : "bg-accent text-white",
             status === "running" && "animate-pulse",
           )}
         >
@@ -66,7 +66,7 @@ export function AgentNode({ data }: NodeProps<AgentNodeData>) {
           </span>
         ))}
       </div>
-      <Handle type="source" position={Position.Right} className="!size-2 !border-violet !bg-surface" />
+      <Handle type="source" position={Position.Right} className="!size-2 !border-accent !bg-surface" />
     </div>
   );
 }

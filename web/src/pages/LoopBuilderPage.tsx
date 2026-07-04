@@ -16,6 +16,7 @@ import "reactflow/dist/style.css";
 import { AgentNode } from "../components/run/AgentNode";
 import { NodeConfigPanel } from "../components/run/NodeConfigPanel";
 import { Button } from "../components/ui/Button";
+import { useThemeStore } from "../store/theme";
 import { useLoopSpec, useUpdateLoopSpec } from "../lib/api/loopspecs";
 import { useCreateTemplate } from "../lib/api/templates";
 import { useGoal } from "../lib/api/goals";
@@ -30,6 +31,10 @@ const nodeTypes = { agent: AgentNode };
 export function LoopBuilderPage() {
   const { specId = "" } = useParams();
   const navigate = useNavigate();
+  const dark = useThemeStore((s) => s.theme === "dark");
+  const flow = dark
+    ? { dots: "rgba(255,255,255,0.1)", node: "#ededed", mapBg: "#111111", mapBorder: "#2a2a2a" }
+    : { dots: "rgba(23,23,23,0.12)", node: "#171717", mapBg: "#ffffff", mapBorder: "#ebebeb" };
   const { data: spec, isLoading } = useLoopSpec(specId);
   const update = useUpdateLoopSpec(specId);
 
@@ -171,9 +176,14 @@ export function LoopBuilderPage() {
             fitView
             proOptions={{ hideAttribution: true }}
           >
-            <Background variant={BackgroundVariant.Dots} gap={26} size={1.1} color="rgba(38,37,30,0.13)" />
+            <Background variant={BackgroundVariant.Dots} gap={26} size={1.1} color={flow.dots} />
             <Controls showInteractive={false} />
-            <MiniMap pannable zoomable nodeColor="#f54e00" style={{ background: "#fafaf7", border: "1px solid rgba(38,37,30,.11)" }} />
+            <MiniMap
+              pannable
+              zoomable
+              nodeColor={flow.node}
+              style={{ background: flow.mapBg, border: `1px solid ${flow.mapBorder}` }}
+            />
           </ReactFlow>
         </div>
 

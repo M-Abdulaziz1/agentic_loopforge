@@ -191,13 +191,13 @@ function PauseCancel({ runId, disabled }: { runId: string; disabled: boolean }) 
 }
 
 const TAG_STYLE: Record<RunEventType, string> = {
-  node_start: "bg-tl-grep text-ink",
-  node_end: "bg-tl-grep text-ink",
-  tool_call: "bg-tl-read text-ink",
-  llm_call: "bg-tl-edit text-ink",
-  cost_update: "bg-[var(--glass2)] text-mut",
-  gate_pending: "bg-tl-done text-white",
-  run_status: "bg-[var(--glass2)] text-ink2",
+  node_start: "border border-[var(--line)] bg-[var(--surface)] text-ink",
+  node_end: "border border-[var(--line)] bg-[var(--surface)] text-ink",
+  tool_call: "border border-[var(--line)] bg-[var(--surface)] text-accent",
+  llm_call: "border border-[var(--line)] bg-[var(--surface)] text-tl-edit",
+  cost_update: "border border-[var(--line)] bg-[var(--canvas-soft)] text-mut",
+  gate_pending: "border border-[var(--line)] bg-[var(--surface)] text-[var(--warning-deep,#ab570a)]",
+  run_status: "border border-[var(--line)] bg-[var(--canvas-soft)] text-ink2",
 };
 
 function EventLog({ events }: { events: RunEvent[] }) {
@@ -215,7 +215,7 @@ function EventLog({ events }: { events: RunEvent[] }) {
             </span>
             <span
               className={cn(
-                "rounded px-1.5 py-0.5 text-[10px] font-extrabold tracking-[.4px]",
+                "rounded-md px-1.5 py-0.5 font-mono text-[10px] font-medium tracking-[.02em]",
                 TAG_STYLE[e.type],
               )}
             >
