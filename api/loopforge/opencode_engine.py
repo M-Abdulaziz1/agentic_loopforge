@@ -17,7 +17,7 @@ from typing import Any, Callable
 
 from api.loopforge.agent_loop import LoopHooks, LoopResult
 from api.loopforge.domain import GoalMode, LoopSpecAgent
-from api.loopforge.providers import SandboxSession
+from api.loopforge.providers import OpencodeServerHandle, SandboxSession
 
 _GUARDRAIL_PREAMBLE = (
     "You are running inside an isolated LoopForge sandbox. There is no general "
@@ -36,17 +36,29 @@ class OpencodeEngine:
     def __init__(
         self,
         *,
-        client_factory: Callable[[], Any],
+        client_factory: Callable[[], Any] | None = None,
         provider_id: str,
         model_id: str,
         mode: GoalMode = GoalMode.OFFLINE_LOCAL,
         opencode_mode: str = "build",
+        server_launcher: Callable[[SandboxSession], OpencodeServerHandle] | None = None,
+        client_from_url: Callable[[str], Any] | None = None,
     ) -> None:
+        # Two wiring modes:
+        #  - production: ``server_launcher`` starts ``opencode serve`` inside the
+        #    run's sandbox and ``client_from_url`` builds a client for its URL.
+        #  - tests / external server: a zero-arg ``client_factory`` yields the client.
+        if server_launcher is not None and client_from_url is None:
+            raise ValueError("server_launcher requires client_from_url")
+        if server_launcher is None and client_factory is None:
+            raise ValueError("OpencodeEngine needs either a server_launcher or a client_factory")
         self.client_factory = client_factory
         self.provider_id = provider_id
         self.model_id = model_id
         self.mode = mode
         self.opencode_mode = opencode_mode
+        self.server_launcher = server_launcher
+        self.client_from_url = client_from_url
 
     def run(
         self,
@@ -65,8 +77,35 @@ class OpencodeEngine:
             result.budget_exhausted = True
             return result
 
+        handle: OpencodeServerHandle | None = None
         try:
-            client = self.client_factory()
+            if self.server_launcher is not None:
+                handle = self.server_launcher(session)
+                hooks.emit(
+                    "tool_call",
+                    f"opencode serve started for {agent.name}",
+                    {"agent": agent.name, "engine": "opencode", "server": handle.base_url},
+                )
+                client = self.client_from_url(handle.base_url)  # type: ignore[misc]
+            else:
+                client = self.client_factory()  # type: ignore[misc]
+            return self._run_with_client(client, agent, result, goal_text, success_criteria, dataset_note, prior_note, hooks)
+        finally:
+            if handle is not None:
+                handle.stop()
+
+    def _run_with_client(
+        self,
+        client: Any,
+        agent: LoopSpecAgent,
+        result: LoopResult,
+        goal_text: str,
+        success_criteria: list[str],
+        dataset_note: str,
+        prior_note: str,
+        hooks: LoopHooks,
+    ) -> LoopResult:
+        try:
             oc_session = client.session.create()
         except Exception as exc:  # network / server down — surface it honestly
             result.failure = f"opencode engine could not open a session: {exc}"

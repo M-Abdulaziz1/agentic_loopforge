@@ -456,7 +456,7 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
             tools=tools,
             dataset_mount=_dataset_mount_for_goal(store, goal),
             evaluator=evaluator,
-            agent_engine=create_agent_engine(settings, llm=llm, goal=goal),
+            agent_engine=create_agent_engine(settings, llm=llm, goal=goal, sandbox=sandbox),
         )
         run = runner.start(goal, spec)
         _audit(store, "run.start", "run", run.id, {"goal_id": goal.id, "loop_spec_id": spec.id, "status": run.status})
@@ -616,7 +616,7 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
                 tools=tools,
                 dataset_mount=_dataset_mount_for_goal(store, goal),
                 evaluator=_evaluator_for_goal(store, goal),
-                agent_engine=create_agent_engine(settings, llm=llm, goal=goal),
+                agent_engine=create_agent_engine(settings, llm=llm, goal=goal, sandbox=sandbox),
             )
             runner.resume_after_gate(run, goal, spec)
         return decided

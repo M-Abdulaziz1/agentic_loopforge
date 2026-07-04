@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 from types import SimpleNamespace
 
 from api.loopforge.agent_engine import NativeReActEngine
@@ -7,6 +8,7 @@ from api.loopforge.agent_loop import LoopHooks
 from api.loopforge.domain import GoalMode, LoopSpecAgent
 from api.loopforge.opencode_config import build_opencode_config
 from api.loopforge.opencode_engine import OpencodeEngine
+from api.loopforge.providers import DatasetMount, DockerGvisorSandboxProvider, OpencodeServerHandle, SandboxSession
 from api.loopforge.runner import LoopRunner
 
 
@@ -187,6 +189,162 @@ def test_opencode_engine_respects_budget():
     assert result.finished is False
 
 
+# ---- in-sandbox opencode serve launcher --------------------------------------
+
+def _fake_docker(records: list, *, container_id="oc123", run_rc=0, run_stderr=""):
+    def runner(command, timeout):
+        records.append(command)
+        if command[:2] == ["docker", "run"]:
+            return subprocess.CompletedProcess(command, run_rc, stdout=f"{container_id}\n", stderr=run_stderr)
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    return runner
+
+
+def test_serve_opencode_launches_hardened_container_and_returns_handle(tmp_path):
+    records: list = []
+    provider = DockerGvisorSandboxProvider(
+        runtime="runsc",
+        opencode_image="loopforge/opencode-sandbox:latest",
+        opencode_network="loopforge-egress",
+        command_runner=_fake_docker(records),
+        readiness_probe=lambda url: True,  # pretend the server answered
+    )
+    workspace = tmp_path / "ws"
+    (workspace / "data").mkdir(parents=True)
+    session = SandboxSession(
+        workspace=workspace,
+        exec_python=lambda ws, code, t: None,
+        dataset_mount=DatasetMount(host_path=tmp_path / "churn.csv", filename="churn.csv"),
+    )
+    cfg = build_opencode_config(provider_id="openai", model_id="m", mode=GoalMode.OFFLINE_LOCAL)
+
+    handle = provider.serve_opencode(session, config=cfg, env={"OPENAI_API_KEY": "k"})
+
+    assert isinstance(handle, OpencodeServerHandle)
+    assert handle.base_url.startswith("http://127.0.0.1:")
+    # opencode.json was written into the run workspace
+    assert (workspace / "opencode.json").exists()
+    run_cmd = records[0]
+    assert run_cmd[:3] == ["docker", "run", "-d"]
+    assert "--runtime=runsc" in run_cmd
+    assert "--network=loopforge-egress" in run_cmd  # NOT the open default bridge
+    assert "--read-only" in run_cmd
+    assert "65532:65532" in run_cmd
+    assert "loopforge/opencode-sandbox:latest" in run_cmd
+    assert "serve" in run_cmd
+    # read-only dataset mounted into the serve container
+    assert any("/workspace/data/churn.csv:ro" in part for part in run_cmd)
+    # publish only to host loopback
+    assert any(part.startswith("127.0.0.1:") and part.endswith(":4096") for part in run_cmd)
+
+    handle.stop()
+    assert records[-1][:3] == ["docker", "rm", "-f"]
+
+
+def test_serve_opencode_surfaces_readiness_timeout_and_cleans_up(tmp_path):
+    records: list = []
+    provider = DockerGvisorSandboxProvider(
+        command_runner=_fake_docker(records),
+        readiness_probe=lambda url: False,  # never becomes ready
+        opencode_startup_timeout_seconds=0.3,
+    )
+    workspace = tmp_path / "ws"
+    (workspace / "data").mkdir(parents=True)
+    session = SandboxSession(workspace=workspace, exec_python=lambda ws, code, t: None)
+    cfg = build_opencode_config(provider_id="openai", model_id="m", mode=GoalMode.OFFLINE_LOCAL)
+
+    import pytest
+
+    with pytest.raises(Exception) as exc:
+        provider.serve_opencode(session, config=cfg)
+    assert "ready" in str(exc.value).lower()
+    # container was force-removed on the failure path
+    assert any(cmd[:3] == ["docker", "rm", "-f"] for cmd in records)
+
+
+def test_opencode_engine_launches_and_stops_in_sandbox_server():
+    transcript = [SimpleNamespace(parts=[SimpleNamespace(type="text", text="Report.", synthetic=False)])]
+    chat_result = SimpleNamespace(tokens={"input": 10, "output": 5}, error=None, summary="")
+    oc_session = _FakeSession(chat_result=chat_result, transcript=transcript)
+
+    stopped = {"count": 0}
+    launched = {"count": 0}
+
+    def launcher(session):
+        launched["count"] += 1
+        return OpencodeServerHandle(
+            base_url="http://127.0.0.1:55055",
+            container_id="oc1",
+            _stop=lambda: stopped.__setitem__("count", stopped["count"] + 1),
+        )
+
+    engine = OpencodeEngine(
+        provider_id="openai",
+        model_id="m",
+        mode=GoalMode.OFFLINE_LOCAL,
+        server_launcher=launcher,
+        client_from_url=lambda url: _FakeClient(oc_session),
+    )
+    hooks, log = _recording_hooks()
+
+    result = engine.run(
+        _agent(),
+        goal_text="g",
+        success_criteria=[],
+        dataset_note="",
+        prior_note="",
+        session=object(),
+        hooks=hooks,
+        max_turns=5,
+    )
+
+    assert result.finished is True
+    assert launched["count"] == 1
+    assert stopped["count"] == 1  # server always torn down
+    assert any(t == "tool_call" for t, _ in log["events"])
+
+
+def test_opencode_engine_stops_server_even_when_run_fails():
+    session = _FakeSession(chat_result=None, transcript=[], raise_on_create=True)
+    stopped = {"count": 0}
+
+    def launcher(_session):
+        return OpencodeServerHandle(
+            base_url="http://127.0.0.1:1",
+            container_id="oc1",
+            _stop=lambda: stopped.__setitem__("count", stopped["count"] + 1),
+        )
+
+    engine = OpencodeEngine(
+        provider_id="openai",
+        model_id="m",
+        server_launcher=launcher,
+        client_from_url=lambda url: _FakeClient(session),
+    )
+    hooks, _ = _recording_hooks()
+
+    result = engine.run(
+        _agent(),
+        goal_text="g",
+        success_criteria=[],
+        dataset_note="",
+        prior_note="",
+        session=object(),
+        hooks=hooks,
+        max_turns=5,
+    )
+    assert result.failure is not None
+    assert stopped["count"] == 1  # finally-block cleanup ran despite the failure
+
+
+def test_opencode_engine_requires_a_client_source():
+    import pytest
+
+    with pytest.raises(ValueError):
+        OpencodeEngine(provider_id="openai", model_id="m")
+
+
 # ---- engine selection ---------------------------------------------------------
 
 def test_runner_defaults_to_native_engine():
@@ -206,3 +364,30 @@ def test_runtime_factory_selects_engine_by_settings():
         Settings(agent_engine=AgentEngineMode.OPENCODE), llm=object(), goal=goal
     )
     assert isinstance(opencode, OpencodeEngine)
+    # Without a sandbox it falls back to a pre-existing server (client_factory).
+    assert opencode.server_launcher is None
+    assert opencode.client_factory is not None
+
+
+def test_runtime_factory_wires_in_sandbox_launcher_when_sandbox_given():
+    from api.loopforge.runtime import create_agent_engine
+    from api.loopforge.settings import AgentEngineMode, Settings
+
+    goal = SimpleNamespace(mode=GoalMode.OFFLINE_LOCAL)
+    launched: list = []
+
+    class _Sandbox:
+        def serve_opencode(self, session, *, config, env=None):
+            launched.append((config, env))
+            return OpencodeServerHandle(base_url="http://127.0.0.1:9", container_id="c", _stop=lambda: None)
+
+    engine = create_agent_engine(
+        Settings(agent_engine=AgentEngineMode.OPENCODE), llm=object(), goal=goal, sandbox=_Sandbox()
+    )
+    assert isinstance(engine, OpencodeEngine)
+    assert engine.server_launcher is not None
+    # the launcher renders the locked-down config + injects only the model env
+    engine.server_launcher(object())
+    config, env = launched[0]
+    assert config["permission"]["webfetch"] == "deny"
+    assert set(env) <= {"OPENAI_API_KEY", "OPENAI_BASE_URL"}

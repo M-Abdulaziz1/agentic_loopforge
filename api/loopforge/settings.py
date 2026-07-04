@@ -43,6 +43,13 @@ class Settings(BaseModel):
     opencode_provider_id: str = "openai"
     opencode_model_id: str = "local-model"
     opencode_mode: str = "build"
+    # In-sandbox opencode server. The image must carry the opencode binary plus the
+    # DS package allowlist; the network must be an egress allowlist (fail-closed
+    # default — the operator creates it), never the open default bridge.
+    docker_opencode_image: str = "loopforge/opencode-sandbox:latest"
+    docker_opencode_network: str = "loopforge-egress"
+    opencode_container_port: int = 4096
+    opencode_startup_timeout_seconds: float = Field(default=30.0, gt=0)
 
     @property
     def opencode_base_url(self) -> str:
@@ -73,4 +80,8 @@ class Settings(BaseModel):
             opencode_provider_id=os.getenv("LOOPFORGE_OPENCODE_PROVIDER_ID", "openai"),
             opencode_model_id=os.getenv("LOOPFORGE_OPENCODE_MODEL_ID", "local-model"),
             opencode_mode=os.getenv("LOOPFORGE_OPENCODE_MODE", "build"),
+            docker_opencode_image=os.getenv("LOOPFORGE_DOCKER_OPENCODE_IMAGE", "loopforge/opencode-sandbox:latest"),
+            docker_opencode_network=os.getenv("LOOPFORGE_DOCKER_OPENCODE_NETWORK", "loopforge-egress"),
+            opencode_container_port=int(os.getenv("LOOPFORGE_OPENCODE_CONTAINER_PORT", "4096")),
+            opencode_startup_timeout_seconds=float(os.getenv("LOOPFORGE_OPENCODE_STARTUP_TIMEOUT_SECONDS", "30")),
         )
