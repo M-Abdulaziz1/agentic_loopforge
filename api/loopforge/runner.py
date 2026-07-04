@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 
-from api.loopforge.agent_loop import AgentLoop, LoopHooks, LoopResult
+from api.loopforge.agent_engine import AgentEngine, NativeReActEngine
+from api.loopforge.agent_loop import LoopHooks, LoopResult
 from api.loopforge.context import ContextManager
 from api.loopforge.domain import Artifact, ContextEntry, Evaluator, Gate, Goal, LoopSpec, Run, RunEvent, RunStatus, now_utc
 from api.loopforge.evaluators import EvaluationCandidate, MlBaselineEvaluator, build_evaluator_provider
@@ -21,6 +22,7 @@ class LoopRunner:
         tools: ToolRegistry,
         dataset_mount: DatasetMount | None = None,
         evaluator: Evaluator | None = None,
+        agent_engine: AgentEngine | None = None,
     ) -> None:
         self.store = store
         self.llm = llm
@@ -28,6 +30,8 @@ class LoopRunner:
         self.tools = tools
         self.dataset_mount = dataset_mount
         self.evaluator = evaluator
+        # Default to LoopForge's own ReAct loop; opencode is opt-in per deployment.
+        self.agent_engine: AgentEngine = agent_engine or NativeReActEngine(llm)
 
     def start(self, goal: Goal, spec: LoopSpec) -> Run:
         run = self.store.save_run(Run(goal_id=goal.id, loop_spec_id=spec.id, status=RunStatus.RUNNING, started_at=now_utc()))
@@ -110,13 +114,15 @@ class LoopRunner:
                 return self._budget_exhausted(run)
 
             hooks.build_context_pack = lambda agent_name=agent.name: build_context_pack(agent_name)
-            loop = AgentLoop(llm=self.llm, session=session, hooks=hooks, max_turns=remaining)
-            result = loop.run(
+            result = self.agent_engine.run(
                 agent=agent,
                 goal_text=goal.text,
                 success_criteria=spec.success_criteria,
                 dataset_note=dataset_note,
                 prior_note=prior_note,
+                session=session,
+                hooks=hooks,
+                max_turns=remaining,
             )
             ran_any_code = ran_any_code or result.ran_code
 

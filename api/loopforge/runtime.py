@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from api.loopforge.agent_engine import AgentEngine, NativeReActEngine
 from api.loopforge.domain import Goal, LLMProviderKind, StoredLLMProvider
+from api.loopforge.opencode_engine import OpencodeEngine
 from api.loopforge.providers import (
     DockerGvisorSandboxProvider,
     LLMProvider,
@@ -9,7 +11,7 @@ from api.loopforge.providers import (
     SandboxProvider,
 )
 from api.loopforge.secrets import SecretCipher
-from api.loopforge.settings import LLMProviderMode, SandboxProviderMode, Settings
+from api.loopforge.settings import AgentEngineMode, LLMProviderMode, SandboxProviderMode, Settings
 from api.loopforge.store import Store
 
 
@@ -60,3 +62,28 @@ def create_sandbox_provider(settings: Settings) -> SandboxProvider:
 
 def create_execution_sandbox_provider(settings: Settings, *, llm: LLMProvider, goal: Goal) -> SandboxProvider:
     return create_sandbox_provider(settings)
+
+
+def create_agent_engine(settings: Settings, *, llm: LLMProvider, goal: Goal) -> AgentEngine:
+    """Select the agent engine. Native ReAct is the default; opencode is opt-in.
+
+    The opencode client is built lazily so the optional ``opencode-ai`` dependency
+    is only required when the engine is actually selected. If it is missing or the
+    server is unreachable, the engine surfaces an honest failure at run time rather
+    than here.
+    """
+    if settings.agent_engine != AgentEngineMode.OPENCODE:
+        return NativeReActEngine(llm)
+
+    def _client():
+        from opencode_ai import Opencode  # imported lazily; extra: .[opencode]
+
+        return Opencode(base_url=settings.opencode_base_url)
+
+    return OpencodeEngine(
+        client_factory=_client,
+        provider_id=settings.opencode_provider_id,
+        model_id=settings.opencode_model_id,
+        mode=goal.mode,
+        opencode_mode=settings.opencode_mode,
+    )

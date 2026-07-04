@@ -14,6 +14,11 @@ class SandboxProviderMode(StrEnum):
     DOCKER_GVISOR = "docker_gvisor"
 
 
+class AgentEngineMode(StrEnum):
+    NATIVE_REACT = "native_react"
+    OPENCODE = "opencode"
+
+
 class Settings(BaseModel):
     storage_path: str = ".loopforge/loopforge.db"
     dataset_storage_path: str = ".loopforge/datasets"
@@ -31,6 +36,17 @@ class Settings(BaseModel):
     docker_network: str = "none"
     docker_memory: str = "512m"
     docker_cpus: str = "1.0"
+    # agent engine: LoopForge's native ReAct loop, or opencode running in-sandbox.
+    agent_engine: AgentEngineMode = AgentEngineMode.NATIVE_REACT
+    opencode_host: str = "127.0.0.1"
+    opencode_port: int = 4096
+    opencode_provider_id: str = "openai"
+    opencode_model_id: str = "local-model"
+    opencode_mode: str = "build"
+
+    @property
+    def opencode_base_url(self) -> str:
+        return f"http://{self.opencode_host}:{self.opencode_port}"
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -51,4 +67,10 @@ class Settings(BaseModel):
             docker_network=os.getenv("LOOPFORGE_DOCKER_NETWORK", "none"),
             docker_memory=os.getenv("LOOPFORGE_DOCKER_MEMORY", "512m"),
             docker_cpus=os.getenv("LOOPFORGE_DOCKER_CPUS", "1.0"),
+            agent_engine=os.getenv("LOOPFORGE_AGENT_ENGINE", AgentEngineMode.NATIVE_REACT.value),
+            opencode_host=os.getenv("LOOPFORGE_OPENCODE_HOST", "127.0.0.1"),
+            opencode_port=int(os.getenv("LOOPFORGE_OPENCODE_PORT", "4096")),
+            opencode_provider_id=os.getenv("LOOPFORGE_OPENCODE_PROVIDER_ID", "openai"),
+            opencode_model_id=os.getenv("LOOPFORGE_OPENCODE_MODEL_ID", "local-model"),
+            opencode_mode=os.getenv("LOOPFORGE_OPENCODE_MODE", "build"),
         )

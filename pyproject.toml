@@ -14,6 +14,11 @@ dependencies = [
 dev = [
   "pytest>=8.2,<9.0",
 ]
+# opencode agent engine (opt-in): the SDK LoopForge uses to drive an in-sandbox
+# `opencode serve`. Install with `pip install -e .[opencode]`.
+opencode = [
+  "opencode-ai>=0.1.0a36",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

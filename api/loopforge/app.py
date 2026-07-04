@@ -60,7 +60,7 @@ from api.loopforge.datasets import parse_multipart_upload, profile_csv, safe_dat
 from api.loopforge.planner import LoopPlanner, PlannerError
 from api.loopforge.runner import LoopRunner
 from api.loopforge.providers import DatasetMount, LLMProviderError
-from api.loopforge.runtime import create_execution_sandbox_provider, create_llm_provider, create_llm_provider_from_config
+from api.loopforge.runtime import create_agent_engine, create_execution_sandbox_provider, create_llm_provider, create_llm_provider_from_config
 from api.loopforge.secrets import SecretCipher
 from api.loopforge.settings import Settings
 from api.loopforge.sqlite_store import SQLiteStore
@@ -456,6 +456,7 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
             tools=tools,
             dataset_mount=_dataset_mount_for_goal(store, goal),
             evaluator=evaluator,
+            agent_engine=create_agent_engine(settings, llm=llm, goal=goal),
         )
         run = runner.start(goal, spec)
         _audit(store, "run.start", "run", run.id, {"goal_id": goal.id, "loop_spec_id": spec.id, "status": run.status})
@@ -615,6 +616,7 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
                 tools=tools,
                 dataset_mount=_dataset_mount_for_goal(store, goal),
                 evaluator=_evaluator_for_goal(store, goal),
+                agent_engine=create_agent_engine(settings, llm=llm, goal=goal),
             )
             runner.resume_after_gate(run, goal, spec)
         return decided
