@@ -134,6 +134,14 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="Goal not found") from exc
 
+    @app.delete("/api/goals/{goalId}", status_code=204)
+    def delete_goal(goalId: str) -> None:
+        try:
+            store.delete_goal(goalId)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Goal not found") from exc
+        _audit(store, "goal.delete", "goal", goalId, {})
+
     @app.get("/api/goals/{goalId}/clarification")
     def get_clarification(goalId: str) -> ClarificationSession:
         try:

@@ -46,6 +46,27 @@ class SQLiteStore:
     def list_goals(self) -> list[Goal]:
         return sorted(self._list("goal", Goal), key=lambda goal: goal.created_at, reverse=True)
 
+    def delete_goal(self, goal_id: str) -> None:
+        # Cascade: the goal row itself, everything scoped to it via goal_id (clarification,
+        # loop specs, runs), and every child scoped to those runs via run_id (events,
+        # artifacts, context, gates).
+        with self._lock:
+            run_ids = [
+                row[0]
+                for row in self._connection.execute(
+                    "SELECT id FROM records WHERE kind = 'run' AND goal_id = ?", (goal_id,)
+                ).fetchall()
+            ]
+            for run_id in run_ids:
+                self._connection.execute("DELETE FROM records WHERE run_id = ?", (run_id,))
+            self._connection.execute("DELETE FROM records WHERE goal_id = ?", (goal_id,))
+            cursor = self._connection.execute(
+                "DELETE FROM records WHERE kind = 'goal' AND id = ?", (goal_id,)
+            )
+            self._connection.commit()
+        if cursor.rowcount == 0:
+            raise KeyError(goal_id)
+
     def save_clarification(self, session: ClarificationSession) -> ClarificationSession:
         self._save("clarification", session, goal_id=session.goal_id)
         return session

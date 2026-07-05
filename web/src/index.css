@@ -1,34 +1,120 @@
 @import "tailwindcss";
 
+/*
+ * LoopForge — Vercel / Geist system.
+ * A near-white sheet (#fafafa) carrying near-black ink (#171717) and almost
+ * nothing else: one ink tone drives headings, primary CTAs, and the 1px hairlines
+ * that define every card. The only chroma is Vercel Blue (#0070f3) for links,
+ * focus, and active state, plus a single mesh-gradient flourish reserved for
+ * hero/empty surfaces. Token *names* are kept from prior themes so the app
+ * re-skins by repointing values — `violet` now resolves to ink, `teal` to the
+ * accent blue, and the old `tl-*` agent pastels collapse onto the ink/blue/grey
+ * ladder (Vercel allows no decorative pastels).
+ */
 :root {
-  --bg0: #08081a;
-  --violet: #8a6cff;
-  --teal: #4ad6ff;
-  --ink: #f0eeff;
-  --ink2: #cfcbf0;
-  --mut: #928db8;
-  --ok: #46e3ad;
-  --warn: #ffd166;
-  --bad: #ff6b9a;
-  --glass: rgba(255, 255, 255, 0.05);
-  --glass2: rgba(255, 255, 255, 0.08);
-  --line: rgba(255, 255, 255, 0.1);
-  --line2: rgba(255, 255, 255, 0.16);
+  /* surface */
+  --bg0: #fafafa; /* near-white canvas */
+  --canvas-soft: #f2f2f2; /* faint inset well */
+  --surface: #ffffff; /* elevated white card */
+  --surface-strong: #ebebeb; /* tag / track fill */
+
+  /* ink → body → mute → faint ladder */
+  --ink: #171717; /* near-black — headings, emphasis, primary fill */
+  --ink2: #4d4d4d; /* body copy */
+  --mut: #8f8f8f; /* muted labels, metadata */
+  --mut-soft: #a1a1a1; /* placeholders, disabled */
+
+  /* "brand" (kept name): primary = ink, accent = Vercel blue */
+  --violet: #171717; /* ink — primary CTA fill */
+  --teal: #0070f3; /* Vercel Blue — link / focus / active accent */
+  --accent: #0070f3;
+  --accent-deep: #0761d1;
+  --accent-soft: #d3e5ff;
+  --on-ink: #ffffff; /* foreground on an ink fill (primary button, done tile) */
+  --ink-hover: #383838; /* primary-fill hover */
+
+  /* semantic (Vercel palette) */
+  --ok: #0070f3; /* blue doubles as positive/active */
+  --warn: #f5a623;
+  --warning-deep: #ab570a;
+  --bad: #ee0000;
+
+  /* agent stages — ink/blue/grey (no pastels in the Vercel system) */
+  --tl-think: #0070f3; /* active → blue */
+  --tl-grep: #171717; /* ink */
+  --tl-read: #0070f3;
+  --tl-edit: #7928ca; /* the one violet illustration accent */
+  --tl-done: #171717; /* done → ink */
+
+  /* fills + hairlines (ink-based on the near-white sheet) */
+  --glass: #ffffff; /* elevated surface */
+  --glass2: rgba(23, 23, 23, 0.05); /* faint ink wash for insets */
+  --line: #ebebeb; /* the structural 1px hairline */
+  --line2: #e0e0e0; /* stronger hairline */
+}
+
+/*
+ * Dark mode — Vercel's dark-first product dialect. Near-black sheet, near-white
+ * ink, brighter blue accent. The primary "ink" fill inverts to near-white with a
+ * dark foreground (--on-ink), exactly how Vercel flips its black pill in dark.
+ */
+.dark {
+  --bg0: #0a0a0a;
+  --canvas-soft: #171717;
+  --surface: #111111;
+  --surface-strong: #2a2a2a;
+
+  --ink: #ededed;
+  --ink2: #a1a1a1;
+  --mut: #8f8f8f;
+  --mut-soft: #6e6e6e;
+
+  --violet: #ededed; /* primary fill inverts to near-white */
+  --teal: #3291ff;
+  --accent: #3291ff;
+  --accent-deep: #0070f3;
+  --accent-soft: rgba(50, 145, 255, 0.16);
+  --on-ink: #0a0a0a; /* dark text on the near-white primary fill */
+  --ink-hover: #d4d4d4;
+
+  --ok: #3291ff;
+  --warn: #f5a623;
+  --warning-deep: #f5b544;
+  --bad: #ff6166;
+
+  --tl-think: #3291ff;
+  --tl-grep: #ededed;
+  --tl-read: #3291ff;
+  --tl-edit: #a78bfa;
+  --tl-done: #ededed;
+
+  --glass: #111111;
+  --glass2: rgba(255, 255, 255, 0.06);
+  --line: #2a2a2a;
+  --line2: #3a3a3a;
 }
 
 @theme {
   --color-bg0: var(--bg0);
+  --color-canvas-soft: var(--canvas-soft);
+  --color-surface: var(--surface);
   --color-violet: var(--violet);
   --color-teal: var(--teal);
+  --color-accent: var(--accent);
   --color-ink: var(--ink);
   --color-ink2: var(--ink2);
   --color-mut: var(--mut);
   --color-ok: var(--ok);
   --color-warn: var(--warn);
   --color-bad: var(--bad);
-  --font-sans: "Inter", system-ui, sans-serif;
-  --font-display: "Sora", "Inter", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --color-tl-think: var(--tl-think);
+  --color-tl-grep: var(--tl-grep);
+  --color-tl-read: var(--tl-read);
+  --color-tl-edit: var(--tl-edit);
+  --color-tl-done: var(--tl-done);
+  --font-sans: "Geist", "Inter", system-ui, sans-serif;
+  --font-display: "Geist", "Inter", system-ui, sans-serif;
+  --font-mono: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
 }
 
 html,
@@ -43,34 +129,22 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  background:
-    radial-gradient(1100px 620px at 84% -14%, rgba(138, 108, 255, 0.3), transparent 56%),
-    radial-gradient(920px 620px at -12% 112%, rgba(74, 214, 255, 0.2), transparent 58%),
-    radial-gradient(700px 500px at 50% 120%, rgba(138, 108, 255, 0.1), transparent 60%),
-    var(--bg0);
-  background-attachment: fixed;
+  /* Flat near-white sheet — depth comes from hairlines, never a glow field. */
+  background: var(--bg0);
 }
 
-/* Fine grain overlay for depth — sits above the gradient field, below content. */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  opacity: 0.4;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.045'/%3E%3C/svg%3E");
-}
 #root {
   position: relative;
   z-index: 1;
 }
 
+/* Geist display voice: weight 600, tight negative tracking (tighter as it grows). */
 h1,
 h2,
 h3 {
   font-family: var(--font-display);
-  letter-spacing: -0.01em;
+  font-weight: 600;
+  letter-spacing: -0.03em;
 }
 
 /* ---- motion ---- */
@@ -83,22 +157,15 @@ h3 {
   0%,
   100% {
     opacity: 1;
-    transform: scale(1);
   }
   50% {
-    opacity: 0.72;
-    transform: scale(1.045);
-  }
-}
-@keyframes lf-orbit {
-  to {
-    transform: rotate(360deg);
+    opacity: 0.5;
   }
 }
 @keyframes lf-rise {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(9px);
   }
   to {
     opacity: 1;
@@ -106,35 +173,58 @@ h3 {
   }
 }
 .lf-rise {
-  animation: lf-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: lf-rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
-
-/* ---- agent pipeline conduits ---- */
 @keyframes lf-shimmer {
   to {
     background-position: -200% 0;
   }
 }
+
+/* ---- primitives ---- */
+/* Flat white card on the near-white sheet, defined by a 1px hairline. */
+.lf-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+/* Uppercase Geist Mono section eyebrow — spec-sheet label. */
+.lf-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--mut);
+}
+/* The one decorative flourish: the Vercel mesh gradient, for hero/empty wells. */
+.lf-mesh {
+  background:
+    radial-gradient(60% 120% at 0% 0%, rgba(0, 124, 240, 0.18), transparent 60%),
+    radial-gradient(60% 120% at 100% 0%, rgba(121, 40, 202, 0.16), transparent 60%),
+    radial-gradient(80% 140% at 100% 100%, rgba(255, 0, 128, 0.1), transparent 55%),
+    radial-gradient(80% 140% at 0% 100%, rgba(249, 203, 40, 0.1), transparent 55%);
+}
+/* Agent conduit, now in the accent blue. */
 .lf-conduit {
-  height: 2.5px;
+  height: 2px;
   border-radius: 3px;
 }
 .lf-conduit--idle {
   background: var(--line2);
 }
 .lf-conduit--done {
-  background: linear-gradient(90deg, var(--violet), var(--teal));
+  background: var(--ink);
 }
 .lf-conduit--active {
-  background: linear-gradient(90deg, rgba(138, 108, 255, 0.2), var(--teal), rgba(138, 108, 255, 0.2));
+  background: linear-gradient(90deg, rgba(0, 112, 243, 0.15), var(--accent), rgba(0, 112, 243, 0.15));
   background-size: 200% 100%;
-  animation: lf-shimmer 1.1s linear infinite;
-  box-shadow: 0 0 12px rgba(74, 214, 255, 0.55);
+  animation: lf-shimmer 1.3s linear infinite;
 }
 
-/* Keyboard focus ring (low specificity via :where so components can still style). */
+/* Keyboard focus ring — Vercel blue. */
 :where(a, button, input, textarea, select, [role="switch"], [tabindex]):focus-visible {
-  outline: 2px solid var(--teal);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: 6px;
 }

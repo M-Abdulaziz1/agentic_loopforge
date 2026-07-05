@@ -184,7 +184,10 @@ class AgentLoop:
             if missing_package is not None:
                 result.failure = (
                     f"Sandbox Python environment is missing package '{missing_package}'. "
-                    "Configure LOOPFORGE_DOCKER_SANDBOX_IMAGE with the approved ML packages installed."
+                    "The agent cannot install packages itself (guardrail #2 — no open pip "
+                    "install); the approved data-science libraries must be baked into the "
+                    "sandbox image. Build docker/sandbox.Dockerfile and point "
+                    "LOOPFORGE_DOCKER_SANDBOX_IMAGE at it (e.g. loopforge/sandbox:latest)."
                 )
             return _format_exec(outcome)
         if tool == "write_file":
