@@ -22,7 +22,7 @@ export function MeterBar({ label, value, fraction, warn }: MeterBarProps) {
             "h-full rounded",
             warn
               ? "bg-gradient-to-r from-[#ffb24d] to-warn"
-              : "bg-gradient-to-r from-violet to-teal",
+              : "bg-[var(--accent)]",
           )}
           style={{ width: `${pct}%` }}
         />

@@ -25,3 +25,16 @@ export function useCreateGoal() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["goals"] }),
   });
 }
+
+export function useDeleteGoal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (goalId: string) =>
+      apiFetch<void>(`/api/goals/${goalId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      // Deleting a goal cascades to its runs on the server.
+      qc.invalidateQueries({ queryKey: ["goals"] });
+      qc.invalidateQueries({ queryKey: ["runs"] });
+    },
+  });
+}

@@ -94,7 +94,7 @@ export function AgentPipeline({ agents, view, selectedId, onSelect }: Props) {
 
 const SEG: Record<AgentStatus, string> = {
   idle: "bg-[var(--line2)]",
-  running: "bg-gradient-to-r from-violet to-teal",
+  running: "bg-[var(--accent)]",
   done: "bg-ok",
 };
 
@@ -130,12 +130,12 @@ function AgentModule({
       className={cn(
         "lf-rise group relative flex flex-col overflow-hidden rounded-3xl border p-5 text-left backdrop-blur-md transition duration-200",
         selected
-          ? "border-teal bg-[rgba(74,214,255,.06)] shadow-[0_0_0_1px_var(--teal),0_20px_50px_rgba(74,214,255,.2)]"
+          ? "border-teal bg-[var(--accent-soft)]"
           : status === "running"
-            ? "border-[rgba(205,188,255,.5)] bg-white/[0.045] shadow-[0_18px_46px_rgba(138,108,255,.22)]"
+            ? "border-[var(--line2)] bg-white/[0.045]"
             : status === "done"
               ? "border-[var(--line2)] bg-white/[0.03] hover:-translate-y-1 hover:border-[rgba(70,227,173,.4)] hover:shadow-[0_20px_48px_rgba(70,227,173,.14)]"
-              : "border-[var(--line)] bg-white/[0.02] hover:-translate-y-1 hover:border-[var(--line2)] hover:shadow-[0_20px_48px_rgba(138,108,255,.14)]",
+              : "border-[var(--line)] bg-white/[0.02] hover:-translate-y-1 hover:border-[var(--line2)] hover:",
       )}
     >
       {/* status accent bar */}
@@ -162,7 +162,7 @@ function AgentModule({
           {agent.tools.slice(0, 4).map((t) => (
             <span
               key={t}
-              className="rounded-md border border-[rgba(74,214,255,.22)] bg-[rgba(74,214,255,.1)] px-1.5 py-0.5 font-mono text-[10px] text-[#c4eeff]"
+              className="rounded-md border border-[var(--accent)] bg-[var(--accent-soft)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--accent)]"
             >
               {t}
             </span>
@@ -207,7 +207,7 @@ function Tile({ name, status }: { name: string; status: AgentStatus }) {
           status === "done"
             ? "border-[rgba(70,227,173,.45)] bg-[rgba(70,227,173,.14)] text-ok"
             : status === "running"
-              ? "border-transparent bg-gradient-to-br from-violet to-teal text-white shadow-[0_0_24px_rgba(138,108,255,.5)]"
+              ? "border-transparent bg-[var(--accent)] text-white"
               : "border-[var(--line2)] bg-[var(--glass)] text-ink2",
         )}
       >
@@ -225,7 +225,7 @@ function Tile({ name, status }: { name: string; status: AgentStatus }) {
 function StatusTag({ status }: { status: AgentStatus }) {
   const map: Record<AgentStatus, string> = {
     idle: "bg-[var(--glass2)] text-mut",
-    running: "bg-[rgba(138,108,255,.28)] text-[#e3daff]",
+    running: "bg-[var(--accent-soft)] text-[var(--accent)]",
     done: "bg-[rgba(70,227,173,.2)] text-[#bff5e3]",
   };
   return (

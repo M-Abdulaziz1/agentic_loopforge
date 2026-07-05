@@ -75,7 +75,7 @@ export function TemplatesPage() {
                     type="button"
                     onClick={() => useTemplate(t.id)}
                     disabled={!goalId || instantiate.isPending}
-                    className="flex-1 rounded-xl bg-gradient-to-br from-violet to-teal px-3 py-2 text-[13px] font-bold text-white disabled:opacity-50"
+                    className="flex-1 rounded-xl bg-[var(--accent)] px-3 py-2 text-[13px] font-bold text-white disabled:opacity-50"
                   >
                     Use template
                   </button>

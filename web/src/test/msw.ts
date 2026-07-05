@@ -22,6 +22,7 @@ import {
 export const handlers = [
   http.get("/api/goals", () => HttpResponse.json([sampleGoal])),
   http.get("/api/goals/:goalId", () => HttpResponse.json(sampleGoal)),
+  http.delete("/api/goals/:goalId", () => new HttpResponse(null, { status: 204 })),
   http.post("/api/goals", () =>
     HttpResponse.json(
       { goal: sampleGoal, clarification: sampleClarification, loop_spec: null },

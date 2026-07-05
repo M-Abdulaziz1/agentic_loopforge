@@ -11,7 +11,7 @@ import type { Dataset, DatasetStatus } from "../lib/api/types";
 
 const STATUS_STYLE: Record<DatasetStatus, string> = {
   ready: "bg-[rgba(70,227,173,.14)] text-[#9af3d4]",
-  profiling: "bg-[rgba(138,108,255,.2)] text-[#dcd0ff]",
+  profiling: "bg-[var(--accent-soft)] text-[var(--accent)]",
   uploaded: "bg-[rgba(255,209,102,.15)] text-[#ffe2a0]",
   failed: "bg-[rgba(255,107,154,.14)] text-[#ffd0e0]",
 };
@@ -95,7 +95,7 @@ export function DatasetsPage() {
               value={name}
               placeholder={file?.name ?? "customers_q2"}
               onChange={(e) => setName(e.target.value)}
-              className="mb-3 w-full rounded-lg border border-[var(--line2)] bg-white/[0.03] px-3 py-2 text-[13px] text-ink outline-none focus:border-[#cdbcff]"
+              className="mb-3 w-full rounded-lg border border-[var(--line2)] bg-white/[0.03] px-3 py-2 text-[13px] text-ink outline-none focus:border-[var(--accent)]"
             />
             {upload.isError ? (
               <div className="mb-3 rounded-lg bg-[rgba(255,107,154,.12)] px-3 py-1.5 text-[12px] text-[#ffd0e0]">
@@ -106,7 +106,7 @@ export function DatasetsPage() {
               type="button"
               onClick={submit}
               disabled={!file || upload.isPending}
-              className="w-full rounded-xl bg-gradient-to-br from-violet to-teal px-4 py-2.5 text-[13px] font-bold text-white disabled:opacity-50"
+              className="w-full rounded-xl bg-[var(--accent)] px-4 py-2.5 text-[13px] font-bold text-white disabled:opacity-50"
             >
               {upload.isPending ? "Uploading…" : "Upload dataset"}
             </button>

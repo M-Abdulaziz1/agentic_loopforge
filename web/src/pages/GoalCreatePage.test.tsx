@@ -41,6 +41,42 @@ test("submitting routes to clarification when the API returns a session", async 
   );
 });
 
+test("shows the processing overlay while the planner builds the loop", async () => {
+  let resolve: (() => void) | undefined;
+  const gate = new Promise<void>((r) => {
+    resolve = r;
+  });
+  server.use(
+    http.post("/api/goals", async () => {
+      await gate;
+      return HttpResponse.json(
+        { goal: sampleGoal, clarification: sampleClarification, loop_spec: null },
+        { status: 201 },
+      );
+    }),
+  );
+
+  render(
+    <Providers>
+      <MemoryRouter initialEntries={["/goals/new"]}>
+        <Routes>
+          <Route path="/goals/new" element={<GoalCreatePage />} />
+          <Route path="*" element={<Loc />} />
+        </Routes>
+      </MemoryRouter>
+    </Providers>,
+  );
+
+  await userEvent.type(screen.getByLabelText("Goal"), "find churn drivers in q2");
+  await userEvent.click(screen.getByRole("button", { name: /Create & check clarity/ }));
+
+  // While the request is in flight the overlay communicates progress.
+  expect(await screen.findByRole("status", { name: "Processing the goal" })).toBeInTheDocument();
+
+  resolve?.();
+  expect(await screen.findByTestId("loc")).toHaveTextContent("/goals/goal_churn_q2/clarify");
+});
+
 test("uploads a dataset from the goal setup flow and uses it on submit", async () => {
   let submittedDatasetId: unknown = null;
   server.use(

@@ -10,7 +10,7 @@ const GLYPH: Record<string, string> = {
 };
 
 const STATUS_PILL: Record<AgentNodeData["status"], string> = {
-  running: "bg-[rgba(138,108,255,.32)] text-[#e3daff]",
+  running: "bg-[var(--accent-soft)] text-[var(--accent)]",
   done: "bg-[rgba(70,227,173,.2)] text-[#bff5e3]",
   idle: "bg-[var(--glass2)] text-mut",
 };
@@ -22,9 +22,9 @@ export function AgentNode({ data }: NodeProps<AgentNodeData>) {
       className={cn(
         "w-[212px] rounded-2xl border bg-gradient-to-b from-white/[0.07] to-white/[0.03] p-3.5 backdrop-blur-md transition",
         selected
-          ? "border-teal shadow-[0_0_0_1.5px_var(--teal),0_0_40px_rgba(74,214,255,.4)]"
+          ? "border-teal"
           : status === "running"
-            ? "border-[#cdbcff] shadow-[0_0_0_1px_rgba(205,188,255,.5),0_0_36px_rgba(138,108,255,.45)]"
+            ? "border-[var(--accent)]"
             : "border-[var(--line2)]",
       )}
     >
@@ -37,7 +37,7 @@ export function AgentNode({ data }: NodeProps<AgentNodeData>) {
               ? "bg-[rgba(70,227,173,.22)] text-ok"
               : status === "idle"
                 ? "bg-[var(--glass2)] text-mut"
-                : "bg-gradient-to-br from-[rgba(138,108,255,.55)] to-[rgba(74,214,255,.42)]",
+                : "bg-[var(--accent-soft)]",
             status === "running" && "animate-pulse",
           )}
         >
@@ -60,7 +60,7 @@ export function AgentNode({ data }: NodeProps<AgentNodeData>) {
         {tools.map((t) => (
           <span
             key={t}
-            className="rounded-md border border-[rgba(74,214,255,.25)] bg-[rgba(74,214,255,.15)] px-2 py-0.5 text-[10px] text-[#c4eeff]"
+            className="rounded-md border border-[var(--accent)] bg-[var(--accent-soft)] px-2 py-0.5 text-[10px] text-[var(--accent)]"
           >
             {t}
           </span>

@@ -55,7 +55,7 @@ export function Inspector({
                 {agent.tools.map((t) => (
                   <span
                     key={t}
-                    className="rounded-md border border-[rgba(74,214,255,.25)] bg-[rgba(74,214,255,.15)] px-2 py-0.5 text-[11px] text-[#c4eeff]"
+                    className="rounded-md border border-[var(--accent)] bg-[var(--accent-soft)] px-2 py-0.5 text-[11px] text-[var(--accent)]"
                   >
                     {t}
                   </span>

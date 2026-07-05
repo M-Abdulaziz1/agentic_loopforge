@@ -37,7 +37,7 @@ export function AutonomySlider({
         className="relative mt-1 h-2 rounded-full bg-[var(--glass2)] outline-none"
       >
         <div
-          className="absolute left-0 top-0 h-2 rounded-full bg-gradient-to-r from-violet to-teal transition-all"
+          className="absolute left-0 top-0 h-2 rounded-full bg-[var(--accent)] transition-all"
           style={{ width: `${pct}%` }}
         />
         {AUTONOMY_LEVELS.map((level, i) => {
@@ -54,7 +54,7 @@ export function AutonomySlider({
               className={cn(
                 "absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 transition",
                 active
-                  ? "border-white bg-gradient-to-br from-violet to-teal shadow-[0_0_12px_rgba(138,108,255,.6)]"
+                  ? "border-white bg-[var(--accent)]"
                   : "border-[var(--line2)] bg-bg0",
               )}
             />
@@ -79,7 +79,7 @@ export function AutonomySlider({
       </div>
 
       <div className="mt-3 flex items-center gap-2.5 rounded-xl border border-[var(--line)] bg-white/[0.02] p-3">
-        <span className="rounded-md bg-[rgba(138,108,255,.18)] px-2 py-0.5 text-[11px] font-bold text-[#dcd0ff]">
+        <span className="rounded-md bg-[var(--accent-soft)] px-2 py-0.5 text-[11px] font-bold text-[var(--accent)]">
           {meta.leash}
         </span>
         <span className="text-[12.5px] text-mut">{meta.blurb}</span>

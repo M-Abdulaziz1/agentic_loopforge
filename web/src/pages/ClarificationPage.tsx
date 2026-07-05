@@ -102,7 +102,7 @@ export function ClarificationPage() {
                       type="button"
                       disabled={submit.isPending}
                       onClick={() => sendAnswer(opt)}
-                      className="flex items-center gap-3 rounded-xl border border-[var(--line2)] bg-white/[0.03] px-4 py-3 text-left text-[14px] text-ink transition hover:border-[#cdbcff] hover:bg-[rgba(138,108,255,.14)] disabled:opacity-50"
+                      className="flex items-center gap-3 rounded-xl border border-[var(--line2)] bg-white/[0.03] px-4 py-3 text-left text-[14px] text-ink transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] disabled:opacity-50"
                     >
                       <span
                         aria-hidden
@@ -126,13 +126,13 @@ export function ClarificationPage() {
                     value={answer}
                     onChange={(e) => setAnswer(e.target.value)}
                     placeholder="Type an answer…"
-                    className="max-h-[120px] min-h-[48px] flex-1 resize-none rounded-xl border border-[var(--line2)] bg-white/[0.03] px-4 py-3 text-sm text-ink outline-none focus:border-[#cdbcff]"
+                    className="max-h-[120px] min-h-[48px] flex-1 resize-none rounded-xl border border-[var(--line2)] bg-white/[0.03] px-4 py-3 text-sm text-ink outline-none focus:border-[var(--accent)]"
                   />
                   <button
                     type="button"
                     onClick={() => sendAnswer(answer)}
                     disabled={submit.isPending || answer.trim().length === 0}
-                    className="rounded-xl bg-gradient-to-br from-violet to-teal px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
+                    className="rounded-xl bg-[var(--accent)] px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
                   >
                     Send ↵
                   </button>

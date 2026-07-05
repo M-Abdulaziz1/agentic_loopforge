@@ -1,7 +1,8 @@
-import { useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { cn } from "../lib/cn";
 import { useUiStore } from "../store/ui";
-import { useCancelRun, usePauseRun, useRun, useRunEvents } from "../lib/api/runs";
+import { useCancelRun, usePauseRun, useRun, useRunEvents, useStartRun } from "../lib/api/runs";
+import { ApiError } from "../lib/api/client";
 import { useLoopSpec } from "../lib/api/loopspecs";
 import { useGoal } from "../lib/api/goals";
 import { useGates, useDecideGate } from "../lib/api/gates";
@@ -60,7 +61,11 @@ export function RunPage() {
         </div>
         <StatusPill status={run.status} live={isLive} />
         <div className="flex-1" />
-        <PauseCancel runId={runId} disabled={!isLive} />
+        {isLive ? (
+          <PauseCancel runId={runId} disabled={!isLive} />
+        ) : (
+          <RunActions goalId={run.goal_id} specId={run.loop_spec_id} />
+        )}
       </div>
 
       {/* meter rail + tabs */}
@@ -97,7 +102,7 @@ export function RunPage() {
               className={cn(
                 "rounded-lg px-4 py-1.5 text-[12.5px] font-semibold transition",
                 tab === t.id
-                  ? "bg-gradient-to-br from-[rgba(138,108,255,.4)] to-[rgba(74,214,255,.3)] text-white shadow-[0_4px_14px_rgba(138,108,255,.3)]"
+                  ? "bg-[var(--accent-soft)] text-white"
                   : "text-mut hover:text-ink",
               )}
             >
@@ -187,11 +192,53 @@ function PauseCancel({ runId, disabled }: { runId: string; disabled: boolean }) 
   );
 }
 
+function RunActions({ goalId, specId }: { goalId: string; specId: string }) {
+  const navigate = useNavigate();
+  const rerun = useStartRun(goalId);
+
+  function onRerun() {
+    // Rerun = start a fresh run from the same (already-approved) loop spec.
+    rerun.mutate(specId, {
+      onSuccess: (run) => navigate(`/runs/${run.id}`),
+    });
+  }
+
+  return (
+    <>
+      <Link
+        to={`/specs/${specId}/edit`}
+        className="rounded-xl border border-[var(--line2)] bg-[var(--glass2)] px-4 py-2 text-[13px] font-semibold text-ink2 transition hover:border-[var(--line2)]"
+      >
+        ✎ Edit loop
+      </Link>
+      <button
+        type="button"
+        disabled={rerun.isPending}
+        onClick={onRerun}
+        className="rounded-xl bg-[var(--accent)] px-4 py-2 text-[13px] font-bold text-white disabled:opacity-50"
+      >
+        {rerun.isPending ? "Starting…" : "↻ Rerun"}
+      </button>
+      {rerun.isError ? (
+        <span className="max-w-[220px] rounded-lg bg-[rgba(255,107,154,.14)] px-2.5 py-1 text-[11.5px] text-[#ffd0e0]">
+          {rerunErrorMessage(rerun.error)}
+        </span>
+      ) : null}
+    </>
+  );
+}
+
+function rerunErrorMessage(error: unknown): string {
+  if (error instanceof ApiError && error.status === 409)
+    return "The loop spec must be approved before it can run. Edit and re-approve it first.";
+  return "Could not start the run. Try again.";
+}
+
 const TAG_STYLE: Record<RunEventType, string> = {
   node_start: "bg-[rgba(70,227,173,.18)] text-[#bff5e3]",
   node_end: "bg-[rgba(70,227,173,.18)] text-[#bff5e3]",
-  tool_call: "bg-[rgba(74,214,255,.18)] text-[#c4eeff]",
-  llm_call: "bg-[rgba(138,108,255,.22)] text-[#e3daff]",
+  tool_call: "bg-[var(--accent-soft)] text-[var(--accent)]",
+  llm_call: "bg-[var(--accent-soft)] text-[var(--accent)]",
   cost_update: "bg-[var(--glass2)] text-mut",
   gate_pending: "bg-[rgba(255,209,102,.2)] text-[#ffe7ad]",
   run_status: "bg-[var(--glass2)] text-ink2",

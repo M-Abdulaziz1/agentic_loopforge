@@ -82,7 +82,7 @@ export function GateInboxPage() {
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   placeholder="Optional note…"
-                  className="flex-1 rounded-xl border border-[var(--line2)] bg-white/[0.03] px-3.5 py-3 text-[13.5px] text-ink outline-none focus:border-[#cdbcff]"
+                  className="flex-1 rounded-xl border border-[var(--line2)] bg-white/[0.03] px-3.5 py-3 text-[13.5px] text-ink outline-none focus:border-[var(--accent)]"
                 />
                 <button
                   type="button"
@@ -125,7 +125,7 @@ function GateRow({
       className={cn(
         "mb-2.5 block w-full rounded-xl border p-3.5 text-left",
         active
-          ? "border-[#cdbcff] bg-gradient-to-br from-[rgba(138,108,255,.2)] to-[rgba(74,214,255,.1)]"
+          ? "border-[var(--accent)] bg-[var(--accent-soft)]"
           : "border-[var(--line)] bg-[var(--glass)] hover:border-[var(--line2)]",
       )}
     >

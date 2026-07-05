@@ -89,7 +89,7 @@ function InsightCard({ insight }: { insight: InsightResult }) {
   return (
     <GlassCard className="mb-3.5">
       <div className="mb-3 flex items-center gap-3">
-        <div className="grid size-[30px] place-items-center rounded-lg bg-gradient-to-br from-violet to-teal text-sm font-extrabold">
+        <div className="grid size-[30px] place-items-center rounded-lg bg-[var(--accent)] text-sm font-extrabold">
           {insight.rank}
         </div>
         <div className="text-base font-bold">{insight.claim}</div>
@@ -152,7 +152,7 @@ function ArtifactRow({ artifact, onView }: { artifact: Artifact; onView: () => v
       <button
         type="button"
         onClick={onView}
-        className="ml-auto rounded-lg border border-[rgba(74,214,255,.25)] bg-[rgba(74,214,255,.1)] px-3 py-1.5 text-[12px] font-semibold text-teal"
+        className="ml-auto rounded-lg border border-[var(--accent)] bg-[var(--accent-soft)] px-3 py-1.5 text-[12px] font-semibold text-teal"
       >
         View / extract
       </button>
@@ -186,7 +186,7 @@ function Drill({ children }: { children: React.ReactNode }) {
   return (
     <button
       type="button"
-      className="rounded-lg border border-[rgba(74,214,255,.25)] bg-[rgba(74,214,255,.1)] px-2.5 py-1.5 text-[12px] font-semibold text-teal"
+      className="rounded-lg border border-[var(--accent)] bg-[var(--accent-soft)] px-2.5 py-1.5 text-[12px] font-semibold text-teal"
     >
       {children}
     </button>
