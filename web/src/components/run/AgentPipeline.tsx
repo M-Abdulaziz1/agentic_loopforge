@@ -38,7 +38,7 @@ export function AgentPipeline({ agents, view, selectedId, onSelect }: Props) {
       }}
     >
       {/* header: title + segmented progress + legend */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-[var(--line)] bg-[rgba(8,8,26,.5)] px-6 py-3 backdrop-blur-md">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-[var(--line)] bg-[var(--canvas-soft)] px-6 py-3 backdrop-blur-md">
         <span className="text-[11px] font-bold uppercase tracking-[1.6px] text-mut">Agent modules</span>
         <span className="rounded-md bg-[var(--glass2)] px-2 py-0.5 font-mono text-[11px] text-ink2">
           {agents.length}

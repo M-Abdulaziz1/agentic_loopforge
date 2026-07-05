@@ -339,7 +339,7 @@ export function GoalCreatePage() {
         </div>
       </div>
 
-      <div className="fixed bottom-0 left-[250px] right-0 flex items-center gap-3 border-t border-[var(--line)] bg-[rgba(8,8,26,.92)] px-7 py-4 backdrop-blur">
+      <div className="fixed bottom-0 left-[250px] right-0 flex items-center gap-3 border-t border-[var(--line)] bg-[var(--surface)] px-7 py-4 backdrop-blur">
         {createGoal.isError ? (
           <div className="max-w-[60%] rounded-lg bg-[rgba(255,107,154,.14)] px-3 py-1.5 text-[12.5px] text-[#ffd0e0]">
             {goalCreateErrorMessage(createGoal.error)}

@@ -157,7 +157,7 @@ export function LoopSpecPage() {
         </div>
       </div>
 
-      <div className="fixed bottom-0 left-[250px] right-0 flex items-center gap-3 border-t border-[var(--line)] bg-[rgba(8,8,26,.92)] px-7 py-4 backdrop-blur">
+      <div className="fixed bottom-0 left-[250px] right-0 flex items-center gap-3 border-t border-[var(--line)] bg-[var(--surface)] px-7 py-4 backdrop-blur">
         <div className="text-[12.5px] text-mut">
           {isApproved
             ? "Spec approved. Start the run to execute the loop."
