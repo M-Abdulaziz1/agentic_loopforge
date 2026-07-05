@@ -120,7 +120,7 @@ export function SettingsPage() {
               type="button"
               onClick={submit}
               disabled={create.isPending || !form.name || !form.model}
-              className="w-full rounded-xl bg-gradient-to-br from-violet to-teal px-4 py-2.5 text-[13px] font-bold text-white disabled:opacity-50"
+              className="w-full rounded-xl bg-[var(--accent)] px-4 py-2.5 text-[13px] font-bold text-white disabled:opacity-50"
             >
               Add provider
             </button>
@@ -222,7 +222,7 @@ function Input({
       value={value}
       placeholder={placeholder}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded-lg border border-[var(--line2)] bg-white/[0.03] px-3 py-2 text-[13px] text-ink outline-none focus:border-[#cdbcff]"
+      className="w-full rounded-lg border border-[var(--line2)] bg-white/[0.03] px-3 py-2 text-[13px] text-ink outline-none focus:border-[var(--accent)]"
     />
   );
 }

@@ -1,8 +1,9 @@
 import subprocess
 
 import httpx
+import pytest
 
-from api.loopforge.providers import DockerGvisorSandboxProvider, OpenAICompatibleLLMProvider
+from api.loopforge.providers import DockerGvisorSandboxProvider, OpenAICompatibleLLMProvider, SandboxProviderError
 
 
 def test_openai_compatible_provider_reads_real_chat_completion_shape() -> None:
@@ -46,3 +47,18 @@ def test_docker_gvisor_provider_builds_hardened_real_execution_command(tmp_path)
     assert "--cap-drop=ALL" in command
     assert any(part.endswith(":/workspace:rw") for part in command)
     assert result.stdout != ""
+
+
+def test_docker_gvisor_provider_raises_for_missing_runtime(tmp_path) -> None:
+    def runner(command: list[str], timeout_seconds: int) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            command,
+            125,
+            stdout="",
+            stderr="docker: Error response from daemon: unknown or invalid runtime name: runsc\n",
+        )
+
+    provider = DockerGvisorSandboxProvider(workspace_root=tmp_path, command_runner=runner)
+
+    with pytest.raises(SandboxProviderError, match="runsc"):
+        provider.run_code("print('hello')", timeout_seconds=3)

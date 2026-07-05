@@ -51,7 +51,7 @@ export function NodeConfigPanel({
         aria-label="Role"
         value={role}
         onChange={(e) => onRole(e.target.value)}
-        className="mb-3 w-full rounded-lg border border-[var(--line2)] bg-white/[0.03] px-3 py-2 text-[13px] text-ink outline-none focus:border-[#cdbcff]"
+        className="mb-3 w-full rounded-lg border border-[var(--line2)] bg-white/[0.03] px-3 py-2 text-[13px] text-ink outline-none focus:border-[var(--accent)]"
       />
 
       <Label>System prompt</Label>
@@ -59,7 +59,7 @@ export function NodeConfigPanel({
         aria-label="System prompt"
         value={systemPrompt}
         onChange={(e) => onPrompt(e.target.value)}
-        className="mb-3 min-h-[88px] w-full resize-y rounded-lg border border-[var(--line2)] bg-white/[0.03] px-3 py-2 text-[13px] leading-relaxed text-ink outline-none focus:border-[#cdbcff]"
+        className="mb-3 min-h-[88px] w-full resize-y rounded-lg border border-[var(--line2)] bg-white/[0.03] px-3 py-2 text-[13px] leading-relaxed text-ink outline-none focus:border-[var(--accent)]"
       />
 
       <Label>Tools</Label>
@@ -77,7 +77,7 @@ export function NodeConfigPanel({
               className={cn(
                 "rounded-md border px-2 py-1 text-[11px] font-semibold transition",
                 on
-                  ? "border-[rgba(74,214,255,.4)] bg-[rgba(74,214,255,.18)] text-[#c4eeff]"
+                  ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]"
                   : "border-[var(--line2)] bg-[var(--glass2)] text-mut hover:text-ink",
                 locked && "cursor-not-allowed opacity-40",
               )}

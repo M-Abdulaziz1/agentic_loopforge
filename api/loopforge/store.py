@@ -9,6 +9,7 @@ class Store(Protocol):
     def save_goal(self, goal: Goal) -> Goal: ...
     def get_goal(self, goal_id: str) -> Goal: ...
     def list_goals(self) -> list[Goal]: ...
+    def delete_goal(self, goal_id: str) -> None: ...
     def save_clarification(self, session: ClarificationSession) -> ClarificationSession: ...
     def get_clarification_by_goal(self, goal_id: str) -> ClarificationSession: ...
     def save_loop_spec(self, spec: LoopSpec) -> LoopSpec: ...
@@ -73,6 +74,23 @@ class InMemoryStore:
 
     def list_goals(self) -> list[Goal]:
         return sorted(self.goals.values(), key=lambda goal: goal.created_at, reverse=True)
+
+    def delete_goal(self, goal_id: str) -> None:
+        # Cascade: drop the goal plus every record scoped to it — its clarification,
+        # loop specs, and runs (with each run's events/artifacts/context/gates).
+        if goal_id not in self.goals:
+            raise KeyError(goal_id)
+        for run in [run for run in self.runs.values() if run.goal_id == goal_id]:
+            self.events.pop(run.id, None)
+            self.artifacts.pop(run.id, None)
+            self.context_entries.pop(run.id, None)
+            for gate_id in [gid for gid, gate in self.gates.items() if gate.run_id == run.id]:
+                del self.gates[gate_id]
+            del self.runs[run.id]
+        for spec_id in [sid for sid, spec in self.loop_specs.items() if spec.goal_id == goal_id]:
+            del self.loop_specs[spec_id]
+        self.clarifications_by_goal.pop(goal_id, None)
+        del self.goals[goal_id]
 
     def save_clarification(self, session: ClarificationSession) -> ClarificationSession:
         self.clarifications_by_goal[session.goal_id] = session

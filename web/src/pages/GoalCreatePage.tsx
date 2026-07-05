@@ -121,7 +121,7 @@ export function GoalCreatePage() {
               value={text}
               onChange={(e) => setText(e.target.value)}
               placeholder="e.g. Find the main drivers of customer churn in the Q2 dataset and validate them statistically."
-              className="min-h-[120px] w-full resize-y rounded-xl border border-[var(--line2)] bg-white/[0.03] p-4 text-[15px] leading-relaxed text-ink outline-none focus:border-[#cdbcff]"
+              className="min-h-[120px] w-full resize-y rounded-xl border border-[var(--line2)] bg-white/[0.03] p-4 text-[15px] leading-relaxed text-ink outline-none focus:border-[var(--accent)]"
             />
           </GlassCard>
 
@@ -139,8 +139,8 @@ export function GoalCreatePage() {
                   className={cn(
                     "rounded-2xl border p-4 text-left transition",
                     mode === m.value
-                      ? "border-[#cdbcff] bg-gradient-to-br from-[rgba(138,108,255,.2)] to-[rgba(74,214,255,.1)]"
-                      : "border-[var(--line2)] hover:border-[rgba(205,188,255,.5)]",
+                      ? "border-[var(--accent)] bg-[var(--accent-soft)]"
+                      : "border-[var(--line2)] hover:border-[var(--line2)]",
                   )}
                 >
                   <div className="flex items-center gap-2.5 font-bold">
@@ -231,7 +231,7 @@ export function GoalCreatePage() {
               aria-label="Dataset"
               value={datasetId}
               onChange={(e) => setDatasetId(e.target.value)}
-              className="w-full rounded-xl border border-[var(--line2)] bg-white/[0.03] px-3.5 py-2.5 text-[14px] text-ink outline-none focus:border-[#cdbcff]"
+              className="w-full rounded-xl border border-[var(--line2)] bg-white/[0.03] px-3.5 py-2.5 text-[14px] text-ink outline-none focus:border-[var(--accent)]"
             >
               <option value="" className="bg-bg0">
                 None (DB only)
@@ -263,14 +263,14 @@ export function GoalCreatePage() {
                   value={datasetName}
                   placeholder={datasetFile?.name ?? "Display name (optional)"}
                   onChange={(e) => setDatasetName(e.target.value)}
-                  className="mt-2 w-full rounded-lg border border-[var(--line2)] bg-white/[0.03] px-3 py-2 text-[13px] text-ink outline-none focus:border-[#cdbcff]"
+                  className="mt-2 w-full rounded-lg border border-[var(--line2)] bg-white/[0.03] px-3 py-2 text-[13px] text-ink outline-none focus:border-[var(--accent)]"
                 />
               </div>
               <button
                 type="button"
                 onClick={uploadAndUseDataset}
                 disabled={!datasetFile || uploadDataset.isPending}
-                className="h-[38px] self-start rounded-xl bg-gradient-to-br from-violet to-teal px-4 text-[13px] font-bold text-white disabled:opacity-50"
+                className="h-[38px] self-start rounded-xl bg-[var(--accent)] px-4 text-[13px] font-bold text-white disabled:opacity-50"
               >
                 {uploadDataset.isPending ? "Uploading…" : "Upload & use dataset"}
               </button>
@@ -296,7 +296,7 @@ export function GoalCreatePage() {
                 aria-label="Evaluator"
                 value={evaluatorId}
                 onChange={(e) => setEvaluatorId(e.target.value)}
-                className="w-full rounded-xl border border-[var(--line2)] bg-white/[0.03] px-3.5 py-2.5 text-[14px] text-ink outline-none focus:border-[#cdbcff]"
+                className="w-full rounded-xl border border-[var(--line2)] bg-white/[0.03] px-3.5 py-2.5 text-[14px] text-ink outline-none focus:border-[var(--accent)]"
               >
                 <option value="" className="bg-bg0">
                   Default evaluator
@@ -323,7 +323,7 @@ export function GoalCreatePage() {
                 aria-label="LLM provider"
                 value={providerId}
                 onChange={(e) => setProviderId(e.target.value)}
-                className="w-full rounded-xl border border-[var(--line2)] bg-white/[0.03] px-3.5 py-2.5 text-[14px] text-ink outline-none focus:border-[#cdbcff]"
+                className="w-full rounded-xl border border-[var(--line2)] bg-white/[0.03] px-3.5 py-2.5 text-[14px] text-ink outline-none focus:border-[var(--accent)]"
               >
                 <option value="" className="bg-bg0">
                   Default provider
@@ -361,10 +361,51 @@ export function GoalCreatePage() {
           type="button"
           onClick={submit}
           disabled={text.trim().length < 3 || createGoal.isPending || uploadDataset.isPending}
-          className="rounded-xl bg-gradient-to-br from-violet to-teal px-[22px] py-2.5 text-sm font-bold text-white shadow-[0_8px_24px_rgba(138,108,255,.35)] disabled:opacity-50"
+          className="rounded-xl bg-[var(--accent)] px-[22px] py-2.5 text-sm font-bold text-white disabled:opacity-50"
         >
-          {createGoal.isPending ? "Checking…" : "Create & check clarity →"}
+          {createGoal.isPending ? "Processing…" : "Create & check clarity →"}
         </button>
+      </div>
+
+      {createGoal.isPending ? <ProcessingOverlay /> : null}
+    </div>
+  );
+}
+
+function ProcessingOverlay() {
+  const steps = [
+    "Reading your goal",
+    "Checking it's clear enough to build",
+    "Drafting the guarded loop spec",
+  ];
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      aria-label="Processing the goal"
+      className="fixed inset-0 z-50 grid place-items-center bg-[rgba(8,8,26,.72)] backdrop-blur-md"
+    >
+      <div className="lf-rise w-full max-w-[420px] rounded-3xl border border-[var(--line2)] bg-[var(--glass)] p-8 text-center">
+        <div className="mx-auto mb-6 size-14 rounded-full border-2 border-[var(--line2)] border-t-teal border-r-violet [animation:lf-orbit_.9s_linear_infinite]" />
+        <div className="text-[17px] font-extrabold tracking-tight text-ink">Processing the goal</div>
+        <p className="mt-1.5 text-[13px] leading-relaxed text-mut">
+          The planner is turning your goal into a loop. This can take up to a minute — hang tight.
+        </p>
+        <div className="mt-6 flex flex-col gap-2.5 text-left">
+          {steps.map((step, i) => (
+            <div
+              key={step}
+              className="flex items-center gap-3 text-[13px] text-ink2 [animation:lf-pulse_1.4s_ease-in-out_infinite]"
+              style={{ animationDelay: `${i * 260}ms` }}
+            >
+              <span className="size-2 shrink-0 rounded-full bg-[var(--accent)]" />
+              {step}
+            </div>
+          ))}
+        </div>
+        <div className="mt-6 h-1 overflow-hidden rounded-full bg-[var(--line2)]">
+          <div className="lf-conduit lf-conduit--active h-full w-full" />
+        </div>
       </div>
     </div>
   );

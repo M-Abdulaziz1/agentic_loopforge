@@ -63,13 +63,13 @@ export function LoopSpecPage() {
                 {spec.agents.map((a, i) => (
                   <div key={a.name} className="flex items-center gap-1">
                     <div className="flex min-w-[88px] flex-col items-center gap-1.5">
-                      <div className="grid size-[52px] place-items-center rounded-2xl border border-[var(--line2)] bg-gradient-to-br from-[rgba(138,108,255,.4)] to-[rgba(74,214,255,.3)] text-lg">
+                      <div className="grid size-[52px] place-items-center rounded-2xl border border-[var(--line2)] bg-[var(--accent-soft)] text-lg">
                         {glyph(a.name)}
                       </div>
                       <small className="text-[11.5px] text-ink2">{a.name}</small>
                     </div>
                     {i < spec.agents.length - 1 ? (
-                      <div className="h-0.5 w-7 bg-gradient-to-r from-violet to-teal opacity-60" />
+                      <div className="h-0.5 w-7 bg-[var(--accent)] opacity-60" />
                     ) : null}
                   </div>
                 ))}
@@ -85,7 +85,7 @@ export function LoopSpecPage() {
                     className="rounded-2xl border border-[var(--line2)] bg-white/[0.025] p-3.5"
                   >
                     <div className="mb-2.5 flex items-center gap-2.5">
-                      <div className="grid size-9 place-items-center rounded-xl bg-gradient-to-br from-violet to-teal text-base">
+                      <div className="grid size-9 place-items-center rounded-xl bg-[var(--accent)] text-base">
                         {glyph(a.name)}
                       </div>
                       <div>
@@ -183,7 +183,7 @@ export function LoopSpecPage() {
             type="button"
             onClick={startRunNow}
             disabled={startRun.isPending}
-            className="rounded-xl bg-gradient-to-br from-violet to-teal px-[22px] py-2.5 text-sm font-bold text-white shadow-[0_8px_24px_rgba(138,108,255,.35)] disabled:opacity-50"
+            className="rounded-xl bg-[var(--accent)] px-[22px] py-2.5 text-sm font-bold text-white disabled:opacity-50"
           >
             {startRun.isPending ? "Starting…" : "▶ Start run"}
           </button>
@@ -222,7 +222,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 
 function Chip({ children }: { children: React.ReactNode }) {
   return (
-    <span className="rounded-md border border-[rgba(74,214,255,.25)] bg-[rgba(74,214,255,.15)] px-2 py-0.5 text-[10px] text-[#c4eeff]">
+    <span className="rounded-md border border-[var(--accent)] bg-[var(--accent-soft)] px-2 py-0.5 text-[10px] text-[var(--accent)]">
       {children}
     </span>
   );

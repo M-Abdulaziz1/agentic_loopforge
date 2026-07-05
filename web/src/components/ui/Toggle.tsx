@@ -19,7 +19,7 @@ export function Toggle({ checked, onChange, label, disabled }: ToggleProps) {
       className={cn(
         "relative h-6 w-11 shrink-0 rounded-full border transition-colors",
         checked
-          ? "border-transparent bg-gradient-to-r from-violet to-teal"
+          ? "border-transparent bg-[var(--accent)]"
           : "border-[var(--line2)] bg-[var(--glass2)]",
         disabled && "opacity-50",
       )}

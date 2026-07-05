@@ -7,10 +7,10 @@ import { useGoal } from "../lib/api/goals";
 import type { ContextEntry } from "../lib/api/types";
 
 const KIND_STYLE: Record<string, string> = {
-  goal: "bg-[rgba(138,108,255,.22)] text-[#e3daff]",
+  goal: "bg-[var(--accent-soft)] text-[var(--accent)]",
   summary: "bg-[rgba(255,209,102,.16)] text-[#ffe2a0]",
-  tool: "bg-[rgba(74,214,255,.18)] text-[#c4eeff]",
-  llm: "bg-[rgba(138,108,255,.18)] text-[#dcd0ff]",
+  tool: "bg-[var(--accent-soft)] text-[var(--accent)]",
+  llm: "bg-[var(--accent-soft)] text-[var(--accent)]",
   artifact: "bg-[rgba(70,227,173,.16)] text-[#bff5e3]",
 };
 
@@ -44,7 +44,7 @@ export function ContextPage() {
             </span>
           </div>
           <div className="relative pl-6">
-            <div className="absolute bottom-1 left-[7px] top-1 w-0.5 bg-gradient-to-b from-violet to-teal opacity-40" />
+            <div className="absolute bottom-1 left-[7px] top-1 w-0.5 bg-[var(--accent)] opacity-40" />
             {ctx.ledger.map((e) => (
               <LedgerEntry key={e.id} entry={e} />
             ))}
@@ -59,7 +59,7 @@ export function ContextPage() {
             </h3>
             <div className="mb-2 h-3 overflow-hidden rounded-md bg-white/[0.08]">
               <div
-                className="h-full bg-gradient-to-r from-violet to-teal"
+                className="h-full bg-[var(--accent)]"
                 style={{ width: `${packPct}%` }}
               />
             </div>

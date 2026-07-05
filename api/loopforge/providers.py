@@ -3,7 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import shutil
+import socket
 import subprocess
+import time
 from typing import Callable, Protocol
 from uuid import uuid4
 
@@ -91,11 +93,31 @@ class SandboxResult:
     stderr: str = ""
 
 
+@dataclass
+class OpencodeServerHandle:
+    """A running in-sandbox ``opencode serve`` process the engine talks to over HTTP."""
+
+    base_url: str
+    container_id: str
+    _stop: Callable[[], None]
+
+    def stop(self) -> None:
+        self._stop()
+
+
 class SandboxProvider(Protocol):
     def run_code(self, code: str, *, timeout_seconds: int, dataset_mount: DatasetMount | dict[str, object] | None = None) -> SandboxResult:
         raise NotImplementedError
 
     def open_session(self, *, dataset_mount: DatasetMount | dict[str, object] | None = None) -> "SandboxSession":
+        raise NotImplementedError
+
+    def serve_opencode(self, session: "SandboxSession", *, config: dict, env: dict[str, str] | None = None) -> OpencodeServerHandle:
+        """Launch ``opencode serve`` inside the sandbox for this run's workspace.
+
+        Only implemented by providers that can host the opencode agent engine; the
+        default provider (Docker+gVisor) does. Other providers may raise.
+        """
         raise NotImplementedError
 
 
@@ -122,9 +144,13 @@ class SandboxSession:
         *,
         workspace: Path,
         exec_python: Callable[[Path, str, int], SandboxResult],
+        dataset_mount: DatasetMount | None = None,
     ) -> None:
         self.workspace = Path(workspace)
         self._exec_python = exec_python
+        # Retained so an in-sandbox opencode server can mount the same read-only
+        # dataset the native loop's run_python calls receive.
+        self.dataset_mount = dataset_mount
 
     def run_python(self, code: str, *, timeout_seconds: int) -> SandboxResult:
         return self._exec_python(self.workspace, code, timeout_seconds)
@@ -175,6 +201,11 @@ class DockerGvisorSandboxProvider:
         memory: str = "512m",
         cpus: str = "1.0",
         command_runner=None,
+        opencode_image: str | None = None,
+        opencode_network: str = "loopforge-egress",
+        opencode_container_port: int = 4096,
+        opencode_startup_timeout_seconds: float = 30.0,
+        readiness_probe: Callable[[str], bool] | None = None,
     ) -> None:
         self.runtime = runtime
         self.image = image
@@ -183,6 +214,14 @@ class DockerGvisorSandboxProvider:
         self.memory = memory
         self.cpus = cpus
         self.command_runner = command_runner or self._run_subprocess
+        # opencode agent engine runs its server in a *separate* image that carries
+        # the opencode binary plus the DS package allowlist; it needs a reachable
+        # port, so it cannot use network=none (see docs/opencode.md).
+        self.opencode_image = opencode_image or image
+        self.opencode_network = opencode_network
+        self.opencode_container_port = opencode_container_port
+        self.opencode_startup_timeout_seconds = opencode_startup_timeout_seconds
+        self.readiness_probe = readiness_probe or _default_opencode_readiness_probe
 
     def open_session(self, *, dataset_mount: DatasetMount | dict[str, object] | None = None) -> SandboxSession:
         workspace = self.workspace_root / uuid4().hex
@@ -194,7 +233,7 @@ class DockerGvisorSandboxProvider:
         def exec_python(ws: Path, code: str, timeout: int) -> SandboxResult:
             return self._run_in_workspace(ws, code, timeout_seconds=timeout, mount=mount)
 
-        return SandboxSession(workspace=workspace, exec_python=exec_python)
+        return SandboxSession(workspace=workspace, exec_python=exec_python, dataset_mount=mount)
 
     def run_code(self, code: str, *, timeout_seconds: int, dataset_mount: DatasetMount | dict[str, object] | None = None) -> SandboxResult:
         workspace = self.workspace_root / uuid4().hex
@@ -242,7 +281,105 @@ class DockerGvisorSandboxProvider:
         except OSError as exc:
             raise SandboxProviderError(f"Docker gVisor sandbox failed to start: {exc}") from exc
 
+        if _docker_infrastructure_failure(completed.stderr, completed.returncode):
+            detail = _first_error_line(completed.stderr) or "docker run failed before Python started"
+            raise SandboxProviderError(f"Docker gVisor sandbox infrastructure failed for runtime '{self.runtime}': {detail}")
+
         return SandboxResult(exit_code=completed.returncode, stdout=completed.stdout, stderr=completed.stderr)
+
+    def serve_opencode(self, session: SandboxSession, *, config: dict, env: dict[str, str] | None = None) -> OpencodeServerHandle:
+        """Start ``opencode serve`` inside a hardened gVisor container for this run.
+
+        The locked-down ``opencode.json`` is written into the run workspace (which
+        is bind-mounted), the read-only dataset is mounted the same way the native
+        loop mounts it, and the server's API port is published only to host
+        loopback. The container keeps the same isolation as code execution
+        (gVisor, non-root, read-only root FS, writable ``/workspace`` + tmpfs). It
+        runs on ``opencode_network`` rather than ``none`` because the API port must
+        be reachable and the model endpoint must be egress-allowlisted; this is the
+        one deliberate difference from the ``run_python`` container and is why the
+        network must be an egress allowlist, not the open default bridge.
+        """
+        from api.loopforge.opencode_config import write_opencode_config
+
+        workspace = session.workspace
+        write_opencode_config(workspace, config)
+        host_port = _free_tcp_port()
+        base_url = f"http://127.0.0.1:{host_port}"
+
+        command = [
+            "docker",
+            "run",
+            "-d",
+            f"--runtime={self.runtime}",
+            f"--network={self.opencode_network}",
+            "--read-only",
+            "--security-opt=no-new-privileges",
+            "--cap-drop=ALL",
+            "--tmpfs",
+            "/tmp:rw,noexec,nosuid,size=64m",
+            "--user",
+            "65532:65532",
+            f"--memory={self.memory}",
+            f"--cpus={self.cpus}",
+            "-p",
+            f"127.0.0.1:{host_port}:{self.opencode_container_port}",
+            "-v",
+            f"{workspace}:/workspace:rw",
+            # opencode needs a writable HOME/XDG under the sole writable mount, and
+            # discovers opencode.json from the working directory.
+            "-e",
+            "HOME=/workspace",
+            "-e",
+            "XDG_CONFIG_HOME=/workspace",
+            "-e",
+            "XDG_DATA_HOME=/workspace/.opencode-data",
+        ]
+        if session.dataset_mount is not None:
+            mount = session.dataset_mount
+            command.extend(["-v", f"{Path(mount.host_path)}:/workspace/data/{Path(mount.filename).name}:ro"])
+        for key, value in (env or {}).items():
+            command.extend(["-e", f"{key}={value}"])
+        command.extend([
+            "-w",
+            "/workspace",
+            self.opencode_image,
+            "opencode",
+            "serve",
+            "--hostname",
+            "0.0.0.0",
+            "--port",
+            str(self.opencode_container_port),
+        ])
+
+        try:
+            completed = self.command_runner(command, int(self.opencode_startup_timeout_seconds) or 30)
+        except subprocess.TimeoutExpired as exc:
+            raise SandboxProviderError("opencode serve container timed out while starting") from exc
+        except OSError as exc:
+            raise SandboxProviderError(f"opencode serve container failed to start: {exc}") from exc
+
+        if completed.returncode != 0 or not (completed.stdout or "").strip():
+            detail = _first_error_line(completed.stderr) or "docker run -d returned no container id"
+            raise SandboxProviderError(f"opencode serve container did not start: {detail}")
+        container_id = completed.stdout.strip().splitlines()[-1].strip()
+
+        def _stop() -> None:
+            try:
+                self.command_runner(["docker", "rm", "-f", container_id], 30)
+            except (OSError, subprocess.SubprocessError):  # pragma: no cover - best effort
+                pass
+
+        deadline = time.monotonic() + self.opencode_startup_timeout_seconds
+        while time.monotonic() < deadline:
+            if self.readiness_probe(base_url):
+                return OpencodeServerHandle(base_url=base_url, container_id=container_id, _stop=_stop)
+            time.sleep(0.25)
+
+        _stop()
+        raise SandboxProviderError(
+            f"opencode serve did not become ready within {self.opencode_startup_timeout_seconds}s at {base_url}"
+        )
 
     @staticmethod
     def _run_subprocess(command: list[str], timeout_seconds: int) -> subprocess.CompletedProcess[str]:
@@ -253,6 +390,40 @@ class DockerGvisorSandboxProvider:
             text=True,
             check=False,
         )
+
+
+def _free_tcp_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+def _default_opencode_readiness_probe(base_url: str) -> bool:
+    """Ready as soon as the server answers HTTP at all (any status, even 404)."""
+    try:
+        httpx.get(base_url, timeout=2.0)
+        return True
+    except httpx.HTTPError:
+        return False
+
+
+def _docker_infrastructure_failure(stderr: str, exit_code: int) -> bool:
+    if exit_code != 125:
+        return False
+    lowered = (stderr or "").lower()
+    return any(
+        marker in lowered
+        for marker in (
+            "unknown or invalid runtime name",
+            "cannot connect to the docker daemon",
+            "error response from daemon",
+            "docker daemon",
+        )
+    )
+
+
+def _first_error_line(stderr: str) -> str:
+    return next((line.strip() for line in (stderr or "").splitlines() if line.strip()), "")
 
 
 def _normalize_dataset_mount(mount: DatasetMount | dict[str, object] | None) -> DatasetMount | None:

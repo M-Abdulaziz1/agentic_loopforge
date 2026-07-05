@@ -55,6 +55,12 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Goal" }
         "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      operationId: deleteGoal
+      summary: Delete a goal and cascade to its clarification, loop specs, and runs
+      responses:
+        "204": { description: Deleted }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /api/goals/{goalId}/clarification:
     parameters:

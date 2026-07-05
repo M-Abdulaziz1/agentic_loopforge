@@ -168,7 +168,7 @@ export function LoopBuilderPage() {
           type="button"
           onClick={save}
           disabled={errors.length > 0 || update.isPending}
-          className="rounded-xl bg-gradient-to-br from-violet to-teal px-5 py-2 text-[13px] font-bold text-white disabled:opacity-50"
+          className="rounded-xl bg-[var(--accent)] px-5 py-2 text-[13px] font-bold text-white disabled:opacity-50"
         >
           Save spec
         </button>

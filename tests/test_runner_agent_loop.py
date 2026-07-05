@@ -3,9 +3,17 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 
 from api.loopforge.domain import Budget, ContextEntry, Goal, LoopSpec, LoopSpecAgent
-from api.loopforge.providers import LLMResponse, SandboxProviderError, SandboxResult, SandboxSession
+from api.loopforge.opencode_engine import OpencodeEngine
+from api.loopforge.providers import (
+    LLMResponse,
+    OpencodeServerHandle,
+    SandboxProviderError,
+    SandboxResult,
+    SandboxSession,
+)
 from api.loopforge.runner import LoopRunner
 from api.loopforge.store import InMemoryStore
 from api.loopforge.tools import default_tool_registry
@@ -105,6 +113,70 @@ def test_agent_observes_real_execution_output_and_persists_grounded_artifacts() 
     assert "rows 100" in llm.calls[1][1]
     tool_events = [e for e in store.list_events(run.id) if e.type == "tool_call"]
     assert any(e.payload.get("exit_code") == 0 for e in tool_events)
+
+
+class _StubOpencodeClient:
+    """Minimal stand-in for the opencode SDK client the engine drives."""
+
+    def __init__(self, summary: str) -> None:
+        self._summary = summary
+        self.session = SimpleNamespace(
+            create=lambda: SimpleNamespace(id="oc_sess"),
+            chat=lambda session_id, **kw: SimpleNamespace(tokens={"input": 20, "output": 10}, error=None, summary=""),
+            messages=lambda session_id: [
+                SimpleNamespace(
+                    parts=[
+                        SimpleNamespace(type="tool", tool="bash", state="done"),
+                        SimpleNamespace(type="text", text=self._summary, synthetic=False),
+                    ]
+                )
+            ],
+            abort=lambda session_id: None,
+        )
+
+
+def test_full_run_completes_on_opencode_engine() -> None:
+    """End-to-end: a planner-shaped spec runs to completion on the opencode engine,
+    with the in-sandbox server launched and torn down — the user-visible goal."""
+    store = InMemoryStore()
+    goal = store.save_goal(Goal(text="Analyze the dataset for a trend", autonomy="autonomous"))
+    agent = LoopSpecAgent(name="Analyst", role="analyze", system_prompt="Analyze the data.", tools=["code_sandbox"])
+    spec = store.save_loop_spec(_spec(goal.id, [agent], ["Report answers the goal"]))
+
+    stopped = {"count": 0}
+
+    def launcher(session):
+        # a real SandboxSession is opened by the runner and handed to the engine
+        assert isinstance(session, SandboxSession)
+        return OpencodeServerHandle(
+            base_url="http://127.0.0.1:40001",
+            container_id="oc1",
+            _stop=lambda: stopped.__setitem__("count", stopped["count"] + 1),
+        )
+
+    engine = OpencodeEngine(
+        provider_id="openai",
+        model_id="claude-sonnet-4-6",
+        server_launcher=launcher,
+        client_from_url=lambda url: _StubOpencodeClient("Observed a significant upward trend."),
+    )
+
+    run = LoopRunner(
+        store=store,
+        llm=SequenceLLM([]),  # opencode does the reasoning; native LLM unused for the turn
+        sandbox=LocalSubprocessSandbox(),
+        tools=default_tool_registry(),
+        agent_engine=engine,
+    ).start(goal, spec)
+
+    assert run.status == "completed"
+    assert run.result_summary and "upward trend" in run.result_summary
+    assert stopped["count"] == 1  # in-sandbox opencode server was torn down
+    # opencode's activity surfaced as LoopForge run events
+    types = {e.type for e in store.list_events(run.id)}
+    assert {"tool_call", "llm_call"} <= types
+    # the written report reached the artifact store
+    assert any(a.kind == "report" for a in store.list_artifacts(run.id))
 
 
 def test_workspace_files_persist_between_steps() -> None:
@@ -230,6 +302,43 @@ def test_run_fails_clearly_when_required_package_is_missing() -> None:
     events = store.list_events(run.id)
     assert events[-1].type == "run_status"
     assert "ModuleNotFoundError" in store.list_artifacts(run.id)[0].metadata["stderr"]
+
+
+class DockerRuntimeFailureSandbox:
+    def run_code(self, code: str, *, timeout_seconds: int, dataset_mount=None) -> SandboxResult:
+        return SandboxResult(
+            exit_code=125,
+            stdout="",
+            stderr="docker: Error response from daemon: unknown or invalid runtime name: runsc\n",
+        )
+
+    def open_session(self, *, dataset_mount=None) -> SandboxSession:
+        root = Path(tempfile.mkdtemp(prefix="lf-test-runtime-failure-"))
+        (root / "data").mkdir(parents=True, exist_ok=True)
+        (root / "output").mkdir(parents=True, exist_ok=True)
+
+        def exec_python(ws: Path, code: str, timeout: int) -> SandboxResult:
+            return self.run_code(code, timeout_seconds=timeout)
+
+        return SandboxSession(workspace=root, exec_python=exec_python)
+
+
+def test_run_fails_immediately_when_docker_runtime_is_unavailable() -> None:
+    store = InMemoryStore()
+    goal = store.save_goal(Goal(text="Train a fraud model", autonomy="autonomous"))
+    agent = LoopSpecAgent(name="Trainer", role="train", system_prompt="Train.", tools=["code_sandbox"])
+    spec = store.save_loop_spec(_spec(goal.id, [agent], ["ok"]))
+    llm = SequenceLLM([
+        json.dumps({"thought": "train", "tool": "run_python", "code": "print('train')"}),
+        json.dumps({"thought": "fake finish", "tool": "finish", "summary": "No model was trained."}),
+    ])
+
+    run = LoopRunner(store=store, llm=llm, sandbox=DockerRuntimeFailureSandbox(), tools=default_tool_registry()).start(goal, spec)
+
+    assert run.status == "failed"
+    assert "Docker sandbox infrastructure failed" in (run.result_summary or "")
+    assert "runsc" in (run.result_summary or "")
+    assert len(llm.calls) == 1
 
 
 def test_agent_prompt_receives_compacted_run_context_each_turn() -> None:

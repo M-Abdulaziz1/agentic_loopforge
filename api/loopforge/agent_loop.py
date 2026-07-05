@@ -176,11 +176,18 @@ class AgentLoop:
                 f"{agent.name} ran code in the sandbox",
                 {"agent": agent.name, "tool": "run_python", "exit_code": outcome.exit_code},
             )
+            infrastructure_failure = _sandbox_infrastructure_failure(outcome)
+            if infrastructure_failure is not None:
+                result.failure = infrastructure_failure
+                return _format_exec(outcome)
             missing_package = _missing_python_package(outcome.stderr)
             if missing_package is not None:
                 result.failure = (
                     f"Sandbox Python environment is missing package '{missing_package}'. "
-                    "Configure LOOPFORGE_DOCKER_SANDBOX_IMAGE with the approved ML packages installed."
+                    "The agent cannot install packages itself (guardrail #2 — no open pip "
+                    "install); the approved data-science libraries must be baked into the "
+                    "sandbox image. Build docker/sandbox.Dockerfile and point "
+                    "LOOPFORGE_DOCKER_SANDBOX_IMAGE at it (e.g. loopforge/sandbox:latest)."
                 )
             return _format_exec(outcome)
         if tool == "write_file":
@@ -269,6 +276,24 @@ def _parse_action(text: str) -> dict[str, Any] | None:
     except ValueError:
         return None
     return data if isinstance(data, dict) and data.get("tool") else None
+
+
+def _sandbox_infrastructure_failure(outcome: SandboxResult) -> str | None:
+    if outcome.exit_code != 125:
+        return None
+    lowered = (outcome.stderr or "").lower()
+    if not any(
+        marker in lowered
+        for marker in (
+            "unknown or invalid runtime name",
+            "cannot connect to the docker daemon",
+            "error response from daemon",
+            "docker daemon",
+        )
+    ):
+        return None
+    detail = next((line.strip() for line in (outcome.stderr or "").splitlines() if line.strip()), "docker run failed before Python started")
+    return f"Docker sandbox infrastructure failed: {detail}"
 
 
 def _missing_python_package(stderr: str) -> str | None:
