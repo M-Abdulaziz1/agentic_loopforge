@@ -1,19 +1,35 @@
-import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useParams } from "react-router-dom";
 import { GlassCard } from "../components/ui/GlassCard";
 import { ArtifactViewer } from "../components/run/ArtifactViewer";
 import { useArtifacts, useResults } from "../lib/api/results";
+import { useRunFile, useRunFiles } from "../lib/api/runs";
 import type { Artifact, InsightResult, ModelResult } from "../lib/api/types";
 
 export function ResultsPage() {
   const { runId = "" } = useParams();
   const { data: results, isLoading } = useResults(runId);
   const { data: artifacts = [] } = useArtifacts(runId);
+  const { data: files = [] } = useRunFiles(runId);
   const [viewerId, setViewerId] = useState<string | null>(null);
+  const [zoomPath, setZoomPath] = useState<string | null>(null);
 
   if (isLoading || !results) return <div className="p-8 text-mut">Loading results…</div>;
 
   const empty = results.insights.length === 0 && results.models.length === 0;
+  const plots = files.filter((f) => f.category === "plot");
+  const outputs = files.filter((f) => f.category === "output");
+  const code = files.filter((f) => f.category === "code");
+  // The Report section is for written reports only — models are shown in the model
+  // card above, code/plots in their own sections. Agent turns re-emit the same
+  // report.md filename with different bodies, so dedupe on content, not filename.
+  const uniqueArtifacts = Array.from(
+    new Map(
+      artifacts
+        .filter((a) => a.kind === "report")
+        .map((a) => [String(a.metadata.content ?? a.id), a]),
+    ).values(),
+  );
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -66,11 +82,55 @@ export function ResultsPage() {
             </>
           )}
 
-          {artifacts.length ? (
+          {plots.length ? (
             <>
-              <SectionTitle>Artifacts</SectionTitle>
+              <SectionTitle>Visualizations</SectionTitle>
+              <div className="mb-2 grid grid-cols-2 gap-3.5">
+                {plots.map((p) => (
+                  <PlotCard
+                    key={p.path}
+                    runId={runId}
+                    path={p.path}
+                    onZoom={() => setZoomPath(p.path)}
+                  />
+                ))}
+              </div>
+            </>
+          ) : null}
+
+          {outputs.length || code.length ? (
+            <>
+              <SectionTitle>Outputs &amp; generated code</SectionTitle>
               <GlassCard>
-                {artifacts.map((a) => (
+                <div className="flex flex-wrap gap-2">
+                  {[...code, ...outputs].map((f) => (
+                    <Link
+                      key={f.path}
+                      to={`/runs/${runId}?tab=files`}
+                      className="flex items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--glass2)] px-2.5 py-1.5 text-[12.5px] text-ink2 transition hover:border-[var(--accent)]"
+                    >
+                      <span className="text-[var(--accent)]">{f.category === "code" ? "❯" : "◆"}</span>
+                      <span className="font-mono">{f.path.split("/").pop()}</span>
+                      <span className="text-[10.5px] text-mut">{fmtBytes(f.size)}</span>
+                    </Link>
+                  ))}
+                </div>
+                <p className="mt-3 text-[12px] text-mut">
+                  Full contents are browsable in the run's{" "}
+                  <Link to={`/runs/${runId}?tab=files`} className="text-[var(--accent)]">
+                    Files tab
+                  </Link>
+                  .
+                </p>
+              </GlassCard>
+            </>
+          ) : null}
+
+          {uniqueArtifacts.length ? (
+            <>
+              <SectionTitle>Report</SectionTitle>
+              <GlassCard>
+                {uniqueArtifacts.map((a) => (
                   <ArtifactRow key={a.id} artifact={a} onView={() => setViewerId(a.id)} />
                 ))}
               </GlassCard>
@@ -81,6 +141,43 @@ export function ResultsPage() {
       {viewerId ? (
         <ArtifactViewer artifactId={viewerId} onClose={() => setViewerId(null)} />
       ) : null}
+      {zoomPath ? (
+        <Lightbox runId={runId} path={zoomPath} onClose={() => setZoomPath(null)} />
+      ) : null}
+    </div>
+  );
+}
+
+function Lightbox({ runId, path, onClose }: { runId: string; path: string; onClose: () => void }) {
+  const { data: file } = useRunFile(runId, path);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-black/80 p-8 backdrop-blur-sm"
+    >
+      <div className="font-mono text-[12px] text-white/70">{path.split("/").pop()}</div>
+      {file?.data_uri ? (
+        <img
+          src={file.data_uri}
+          alt={path}
+          onClick={(e) => e.stopPropagation()}
+          className="max-h-[85vh] max-w-[90vw] rounded-lg border border-white/10 bg-white shadow-2xl"
+        />
+      ) : (
+        <div className="text-sm text-white/60">Loading…</div>
+      )}
+      <button
+        type="button"
+        onClick={onClose}
+        className="rounded-lg border border-white/20 px-3 py-1.5 text-[12px] font-semibold text-white/80 transition hover:bg-white/10"
+      >
+        Close (Esc)
+      </button>
     </div>
   );
 }
@@ -117,27 +214,68 @@ function InsightCard({ insight }: { insight: InsightResult }) {
 }
 
 function ModelCard({ model }: { model: ModelResult }) {
+  const passed = model.beats_baseline && model.leakage_ok;
+  const lift = model.metric_value - model.baseline_value;
   return (
-    <GlassCard className="mb-3.5">
-      <div className="mb-2 flex items-center gap-3">
-        <div className="text-base font-bold">{model.name}</div>
-        <span
-          className={`ml-auto rounded-md px-2 py-0.5 text-[11px] font-bold ${
-            model.beats_baseline
-              ? "border border-[rgba(70,227,173,.3)] bg-[rgba(70,227,173,.12)] text-[#9af3d4]"
-              : "border border-[rgba(255,107,154,.3)] bg-[rgba(255,107,154,.12)] text-[#ffb9d2]"
-          }`}
-        >
-          {model.beats_baseline ? "✓ beats baseline" : "✕ below baseline"}
+    <GlassCard className="mb-3.5 overflow-hidden p-0">
+      {/* model-card header: name + overall verdict */}
+      <div className="flex items-center gap-3 border-b border-[var(--line)] bg-[var(--glass2)] px-5 py-3.5">
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-[.4px] text-mut">Model card</div>
+          <div className="text-base font-bold">{model.name}</div>
+        </div>
+        <span className={`ml-auto ${passed ? passBadge : failBadge}`}>
+          {passed ? "✓ Validated" : "✕ Rejected"}
         </span>
       </div>
-      <div className="flex flex-wrap gap-2.5">
-        <Stat label={model.metric_name} value={model.metric_value.toString()} />
-        <Stat label={`baseline (${model.baseline_name})`} value={model.baseline_value.toString()} />
-        <Stat label="leakage" value={model.leakage_ok ? "clean" : "FAILED"} />
+
+      <div className="grid gap-4 px-5 py-4 md:grid-cols-[auto_1fr]">
+        {/* headline metric */}
+        <div className="rounded-xl border border-[var(--line)] bg-[var(--glass2)] px-5 py-3 text-center md:min-w-[150px]">
+          <div className="text-[11px] uppercase tracking-[.4px] text-mut">{model.metric_name}</div>
+          <div className="mt-1 text-3xl font-extrabold tabular-nums">{fmtNum(model.metric_value)}</div>
+        </div>
+
+        {/* metrics vs thresholds, each with pass/fail */}
+        <div className="flex flex-col divide-y divide-[var(--line)]">
+          <ThresholdRow
+            label={`Beats baseline (${model.baseline_name})`}
+            detail={`${fmtNum(model.metric_value)} vs ${fmtNum(model.baseline_value)} · +${fmtNum(lift)}`}
+            ok={model.beats_baseline}
+          />
+          <ThresholdRow
+            label="Leakage check"
+            detail={model.leakage_ok ? "no train/test leakage detected" : "leakage detected"}
+            ok={model.leakage_ok}
+          />
+        </div>
       </div>
     </GlassCard>
   );
+}
+
+function ThresholdRow({ label, detail, ok }: { label: string; detail: string; ok: boolean }) {
+  return (
+    <div className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+      <span className={ok ? "text-[#46e3ad]" : "text-[#ff6b9a]"}>{ok ? "✓" : "✕"}</span>
+      <span className="text-[13px] font-semibold text-ink">{label}</span>
+      <span className="ml-auto font-mono text-[12px] text-mut">{detail}</span>
+      <span className={ok ? passPill : failPill}>{ok ? "PASS" : "FAIL"}</span>
+    </div>
+  );
+}
+
+const passBadge =
+  "rounded-md border border-[rgba(70,227,173,.3)] bg-[rgba(70,227,173,.12)] px-2.5 py-1 text-[11px] font-bold text-[#9af3d4]";
+const failBadge =
+  "rounded-md border border-[rgba(255,107,154,.3)] bg-[rgba(255,107,154,.12)] px-2.5 py-1 text-[11px] font-bold text-[#ffb9d2]";
+const passPill =
+  "rounded border border-[rgba(70,227,173,.3)] bg-[rgba(70,227,173,.12)] px-1.5 py-0.5 text-[10px] font-bold text-[#9af3d4]";
+const failPill =
+  "rounded border border-[rgba(255,107,154,.3)] bg-[rgba(255,107,154,.12)] px-1.5 py-0.5 text-[10px] font-bold text-[#ffb9d2]";
+
+function fmtNum(n: number) {
+  return Number.isInteger(n) ? n.toString() : n.toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
 }
 
 function ArtifactRow({ artifact, onView }: { artifact: Artifact; onView: () => void }) {
@@ -158,6 +296,39 @@ function ArtifactRow({ artifact, onView }: { artifact: Artifact; onView: () => v
       </button>
     </div>
   );
+}
+
+function PlotCard({ runId, path, onZoom }: { runId: string; path: string; onZoom: () => void }) {
+  const { data: file } = useRunFile(runId, path);
+  return (
+    <GlassCard className="p-3">
+      <div className="mb-2 font-mono text-[11.5px] text-mut">{path.split("/").pop()}</div>
+      {file?.data_uri ? (
+        <button
+          type="button"
+          onClick={onZoom}
+          className="group block w-full overflow-hidden rounded-lg border border-[var(--line)]"
+          title="Click to view full size"
+        >
+          <img
+            src={file.data_uri}
+            alt={path}
+            className="w-full bg-white transition group-hover:opacity-90"
+          />
+        </button>
+      ) : (
+        <div className="grid h-40 place-items-center rounded-lg bg-[var(--glass2)] text-xs text-mut">
+          Loading plot…
+        </div>
+      )}
+    </GlassCard>
+  );
+}
+
+function fmtBytes(n: number) {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {

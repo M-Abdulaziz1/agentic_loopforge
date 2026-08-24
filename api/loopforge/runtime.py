@@ -60,6 +60,8 @@ def create_sandbox_provider(settings: Settings) -> SandboxProvider:
         cpus=settings.docker_cpus,
         opencode_image=settings.docker_opencode_image,
         opencode_network=settings.docker_opencode_network,
+        opencode_dns=settings.docker_opencode_dns,
+        opencode_memory=settings.docker_opencode_memory,
         opencode_container_port=settings.opencode_container_port,
         opencode_startup_timeout_seconds=settings.opencode_startup_timeout_seconds,
     )
@@ -88,25 +90,37 @@ def create_agent_engine(
     if settings.agent_engine != AgentEngineMode.OPENCODE:
         return NativeReActEngine(llm)
 
+    # Drive opencode with the goal's resolved provider (Settings page) so it runs the
+    # model/endpoint the user configured — not the env opencode_* defaults, which only
+    # backfill when the provider doesn't carry a value.
+    provider_id = settings.opencode_provider_id
+    model_id = getattr(llm, "model", None) or settings.opencode_model_id
+    base_url = getattr(llm, "base_url", None) or settings.openai_compatible_base_url
+    api_key = getattr(llm, "api_key", None) or settings.openai_compatible_api_key
+
     def _client_from_url(url: str):
         from opencode_ai import Opencode  # imported lazily; extra: .[opencode]
 
-        return Opencode(base_url=url)
+        # A full agent turn blocks for minutes, so give the read timeout the whole run
+        # budget; max_retries=0 because retrying the POST re-launches the agent run.
+        return Opencode(
+            base_url=url,
+            timeout=settings.opencode_request_timeout_seconds,
+            max_retries=0,
+        )
 
     if sandbox is not None:
         config = build_opencode_config(
-            provider_id=settings.opencode_provider_id,
-            model_id=settings.opencode_model_id,
-            mode=goal.mode,
+            provider_id=provider_id, model_id=model_id, mode=goal.mode, base_url=base_url
         )
-        env = _opencode_container_env(settings)
+        env = _opencode_container_env(provider_id, base_url, api_key)
 
         def _launch(session):
             return sandbox.serve_opencode(session, config=config, env=env)
 
         return OpencodeEngine(
-            provider_id=settings.opencode_provider_id,
-            model_id=settings.opencode_model_id,
+            provider_id=provider_id,
+            model_id=model_id,
             mode=goal.mode,
             opencode_mode=settings.opencode_mode,
             server_launcher=_launch,
@@ -115,25 +129,35 @@ def create_agent_engine(
 
     return OpencodeEngine(
         client_factory=lambda: _client_from_url(settings.opencode_base_url),
-        provider_id=settings.opencode_provider_id,
-        model_id=settings.opencode_model_id,
+        provider_id=provider_id,
+        model_id=model_id,
         mode=goal.mode,
         opencode_mode=settings.opencode_mode,
     )
 
 
-def _opencode_container_env(settings: Settings) -> dict[str, str]:
+def _opencode_container_env(provider_id: str, base_url: str, api_key: str) -> dict[str, str]:
     """Env the in-sandbox opencode server needs to reach the selected model.
 
     For the OpenAI-compatible provider (incl. local vLLM/sovereign), pass the base
     URL and key opencode's ``openai`` provider expects. Real secrets come from the
-    process env (Settings), never hard-coded, and are injected only into the
-    isolated container.
+    resolved provider (Settings/env), never hard-coded, and are injected only into
+    the isolated container.
     """
     env: dict[str, str] = {}
-    if settings.opencode_provider_id == "openai":
-        env["OPENAI_API_KEY"] = settings.openai_compatible_api_key
-        env["OPENAI_BASE_URL"] = settings.openai_compatible_base_url
-    elif settings.opencode_provider_id == "anthropic":
-        env["ANTHROPIC_API_KEY"] = settings.openai_compatible_api_key
+    if provider_id == "openai":
+        env["OPENAI_API_KEY"] = api_key
+        env["OPENAI_BASE_URL"] = _container_reachable_url(base_url)
+    elif provider_id == "anthropic":
+        env["ANTHROPIC_API_KEY"] = api_key
     return env
+
+
+def _container_reachable_url(url: str) -> str:
+    """Rewrite a host-loopback model URL so the sandboxed container can reach it.
+
+    Inside a container ``localhost`` is the container itself; a model served on the
+    host is reachable at ``host.docker.internal`` (paired with ``--add-host`` in the
+    serve command). Non-loopback URLs (a real remote endpoint) pass through.
+    """
+    return url.replace("//localhost:", "//host.docker.internal:").replace("//127.0.0.1:", "//host.docker.internal:")

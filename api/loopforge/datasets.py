@@ -108,7 +108,10 @@ def profile_csv(path: Path) -> DatasetProfile:
                     column.all_int = False
                 if not _can_parse_float(value):
                     column.all_float = False
-                if _EMAIL_RE.search(value) or _PHONE_RE.search(value):
+                # A decimal float (e.g. a PCA feature -1.3598) matches the phone regex;
+                # only treat non-numeric text as a PII value. Real phone/id columns are
+                # still caught by name (_PII_NAME_RE).
+                if not _can_parse_float(value) and (_EMAIL_RE.search(value) or _PHONE_RE.search(value)):
                     column.has_pii_value = True
 
     columns = [_profile_column_from_stats(name, stats[name]) for name in fieldnames]
@@ -130,7 +133,12 @@ def _profile_column_from_stats(name: str, stats: _ColumnStats) -> DatasetColumn:
     unique_count = stats.non_null_count if stats.unique_overflow else len(stats.unique_values or set())
     sample_values = stats.sample or []
     pii_masked = _is_pii_column_from_stats(name, stats, unique_count)
-    if pii_masked:
+    numeric = stats.non_null_count > 0 and (stats.all_int or stats.all_float)
+    if numeric and not _PII_NAME_RE.search(name):
+        # Numeric feature/amount columns are not PII text — never phone/email-mask them.
+        sample = sample_values
+        pii_masked = False
+    elif pii_masked:
         sample = [_mask_value(value, name) for value in sample_values]
     else:
         sample = [mask_pii_text(value) for value in sample_values]

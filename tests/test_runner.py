@@ -1,6 +1,7 @@
 import subprocess
 import sys
 import tempfile
+from pathlib import Path
 
 from api.loopforge.domain import Budget, Goal, LoopSpec, LoopSpecAgent, RunStatus, ToolPermission
 from api.loopforge.providers import LLMResponse, SandboxResult, SandboxSession
@@ -30,9 +31,6 @@ class LocalWorkspaceSandbox:
             return SandboxResult(exit_code=completed.returncode, stdout=completed.stdout, stderr=completed.stderr)
 
         return SandboxSession(workspace=workspace, exec_python=exec_python)
-
-
-from pathlib import Path
 
 
 def make_spec(goal_id: str) -> LoopSpec:

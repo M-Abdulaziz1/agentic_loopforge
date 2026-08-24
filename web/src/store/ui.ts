@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-type RunTab = "canvas" | "events";
+type RunTab = "canvas" | "events" | "files";
 
 type UiState = {
   selectedAgentId: string | null;

@@ -49,6 +49,16 @@ def test_docker_gvisor_provider_builds_hardened_real_execution_command(tmp_path)
     assert result.stdout != ""
 
 
+def test_open_session_makes_workspace_and_output_writable_by_container_uid(tmp_path) -> None:
+    # The non-root container (uid 65532) must be able to write outputs; the host
+    # creates these dirs, so they need world-writable perms or the agent's saves fail.
+    provider = DockerGvisorSandboxProvider(workspace_root=tmp_path, command_runner=lambda c, t: None)
+    session = provider.open_session()
+    for sub in ("", "output", "data"):
+        d = session.workspace / sub if sub else session.workspace
+        assert (d.stat().st_mode & 0o777) == 0o777, f"{sub or 'workspace'} not world-writable"
+
+
 def test_docker_gvisor_provider_raises_for_missing_runtime(tmp_path) -> None:
     def runner(command: list[str], timeout_seconds: int) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess(

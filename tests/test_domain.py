@@ -1,8 +1,6 @@
 from api.loopforge.domain import (
-    Budget,
     GoalCreate,
     GoalMode,
-    GoalToggles,
     LoopSpec,
     LoopSpecAgent,
     RunStatus,

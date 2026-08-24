@@ -226,7 +226,7 @@ function StatusTag({ status }: { status: AgentStatus }) {
   const map: Record<AgentStatus, string> = {
     idle: "bg-[var(--glass2)] text-mut",
     running: "bg-[var(--accent-soft)] text-[var(--accent)]",
-    done: "bg-[rgba(70,227,173,.2)] text-[#bff5e3]",
+    done: "bg-[var(--ok-soft)] text-[var(--ok-ink)]",
   };
   return (
     <span

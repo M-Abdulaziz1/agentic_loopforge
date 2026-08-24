@@ -20,7 +20,7 @@ export function TemplatesPage() {
     if (!goalId && goals.length) setGoalId(goals[0].id);
   }, [goals, goalId]);
 
-  async function useTemplate(templateId: string) {
+  async function applyTemplate(templateId: string) {
     if (!goalId) return;
     const spec = await instantiate.mutateAsync({ templateId, goalId });
     navigate(`/specs/${spec.id}`);
@@ -73,7 +73,7 @@ export function TemplatesPage() {
                 <div className="mt-4 flex gap-2">
                   <button
                     type="button"
-                    onClick={() => useTemplate(t.id)}
+                    onClick={() => applyTemplate(t.id)}
                     disabled={!goalId || instantiate.isPending}
                     className="flex-1 rounded-xl bg-[var(--accent)] px-3 py-2 text-[13px] font-bold text-white disabled:opacity-50"
                   >

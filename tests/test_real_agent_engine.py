@@ -6,7 +6,6 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from api.loopforge.app import create_app
 from api.loopforge.domain import Goal, GoalToggles
 from api.loopforge.planner import LoopPlanner
 from api.loopforge.providers import LLMResponse, SandboxResult, SandboxSession

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 from types import SimpleNamespace
 
@@ -61,14 +62,25 @@ class _FakeSession:
         self.aborted = True
 
 
+class _FakeEvents:
+    """Stands in for opencode's SSE event bus; yields a finite list then ends."""
+
+    def __init__(self, events: list):
+        self._events = events
+
+    def list(self):
+        return iter(self._events)
+
+
 class _FakeClient:
-    def __init__(self, session: _FakeSession):
+    def __init__(self, session: _FakeSession, events: list | None = None):
         self.session = session
+        self.event = _FakeEvents(events or [])
 
 
-def _engine(session: _FakeSession, mode: GoalMode = GoalMode.OFFLINE_LOCAL) -> OpencodeEngine:
+def _engine(session: _FakeSession, mode: GoalMode = GoalMode.OFFLINE_LOCAL, events: list | None = None) -> OpencodeEngine:
     return OpencodeEngine(
-        client_factory=lambda: _FakeClient(session),
+        client_factory=lambda: _FakeClient(session, events),
         provider_id="anthropic",
         model_id="claude-sonnet-4-6",
         mode=mode,
@@ -86,10 +98,27 @@ def test_offline_config_hard_denies_network_and_external():
     assert cfg["model"] == "anthropic/m"
 
 
-def test_online_config_gates_network_via_ask():
-    cfg = build_opencode_config(provider_id="openai", model_id="m", mode=GoalMode.ONLINE_ENABLED)
-    assert cfg["permission"]["webfetch"] == "ask"
-    assert cfg["permission"]["websearch"] == "ask"
+def test_online_allows_network_offline_denies_and_never_asks():
+    # "ask" deadlocks a headless serve, so tools are allow/deny only — never ask.
+    online = build_opencode_config(provider_id="openai", model_id="m", mode=GoalMode.ONLINE_ENABLED)
+    assert online["permission"]["webfetch"] == "allow"
+    assert online["permission"]["*"] == "allow"
+    assert "ask" not in online["permission"].values()
+
+    offline = build_opencode_config(provider_id="openai", model_id="m", mode=GoalMode.OFFLINE_LOCAL)
+    assert offline["permission"]["webfetch"] == "deny"
+    assert offline["permission"]["*"] == "allow"
+    assert "ask" not in offline["permission"].values()
+
+
+def test_config_defines_subagents_for_native_delegation():
+    # The primary session coordinates these via opencode's `task` tool (A2A); the
+    # `task` tool itself is permitted by the "*": "allow" default.
+    cfg = build_opencode_config(provider_id="a", model_id="m", mode=GoalMode.OFFLINE_LOCAL)
+    agents = cfg["agent"]
+    assert {"verifier", "explorer"} <= set(agents)
+    assert all(spec["mode"] == "subagent" for spec in agents.values())
+    assert cfg["permission"]["*"] == "allow"  # task tool not denied
 
 
 def test_config_registers_readonly_db_mcp_when_url_given():
@@ -102,19 +131,53 @@ def test_config_registers_readonly_db_mcp_when_url_given():
 # ---- opencode engine ----------------------------------------------------------
 
 def test_opencode_engine_runs_and_maps_transcript():
+    # Live event stream: one assistant turn (150 tokens), one completed tool call (with its
+    # command + output), and one finalized reasoning text part.
+    events = [
+        SimpleNamespace(
+            type="message.updated",
+            properties=SimpleNamespace(
+                info=SimpleNamespace(id="msg_1", role="assistant", tokens={"input": 100, "output": 50})
+            ),
+        ),
+        SimpleNamespace(
+            type="message.part.updated",
+            properties=SimpleNamespace(
+                part=SimpleNamespace(
+                    id="prt_1",
+                    type="tool",
+                    tool="bash",
+                    state=SimpleNamespace(
+                        status="completed", input={"command": "python train.py"}, output="AUC 0.98", title="bash"
+                    ),
+                )
+            ),
+        ),
+        SimpleNamespace(
+            type="message.part.updated",
+            properties=SimpleNamespace(
+                part=SimpleNamespace(
+                    id="prt_2", type="text", text="Trained the model.", synthetic=False,
+                    time=SimpleNamespace(end=123),
+                )
+            ),
+        ),
+    ]
     transcript = [
         SimpleNamespace(
+            info=SimpleNamespace(role="assistant"),
             parts=[
                 SimpleNamespace(type="tool", tool="bash", state="done"),
-                SimpleNamespace(type="text", text="Validated report.", synthetic=False),
-            ]
+                # sentinel ends the continuation loop after one round
+                SimpleNamespace(type="text", text="Validated report.\n===LOOPFORGE_DONE===", synthetic=False),
+            ],
         )
     ]
     chat_result = SimpleNamespace(tokens={"input": 100, "output": 50}, error=None, summary="")
     session = _FakeSession(chat_result=chat_result, transcript=transcript)
     hooks, log = _recording_hooks()
 
-    result = _engine(session).run(
+    result = _engine(session, events=events).run(
         _agent(),
         goal_text="find churn drivers",
         success_criteria=["p<0.05"],
@@ -129,12 +192,52 @@ def test_opencode_engine_runs_and_maps_transcript():
     assert result.failure is None
     assert result.ran_code is True
     assert result.summary == "Validated report."
+    # LLM call counted from the live assistant message, not a single post-hoc guess.
     assert log["llm_calls"] == [150]
     kinds = [t for t, _ in log["events"]]
     assert "llm_call" in kinds and "tool_call" in kinds
+    # events now carry the real content: the bash command/output and the reasoning text.
+    tool_payload = next(p for t, p in log["events"] if t == "tool_call")
+    assert tool_payload["command"] == "python train.py" and tool_payload["output"] == "AUC 0.98"
+    reasoning = next(p for t, p in log["events"] if t == "llm_call" and p.get("kind") == "reasoning")
+    assert reasoning["text"] == "Trained the model."
     # guardrail preamble + offline tool policy reached opencode
     assert session.chat_kwargs["tools"] == {"webfetch": False, "websearch": False}
     assert "no general internet" in session.chat_kwargs["system"].lower()
+
+
+def test_opencode_engine_harvests_result_file_into_models(tmp_path):
+    # The agent's loopforge_result.json is what reaches the Results page — harvest it.
+    (tmp_path / "output").mkdir()
+    (tmp_path / "output" / "loopforge_result.json").write_text(
+        json.dumps(
+            {
+                "models": [
+                    {
+                        "name": "rf", "metric_name": "recall", "metric_value": 0.8,
+                        "baseline_name": "majority", "baseline_value": 0.0,
+                        "beats_baseline": True, "leakage_ok": True,
+                    }
+                ],
+                "insights": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    transcript = [
+        SimpleNamespace(
+            info=SimpleNamespace(role="assistant"),
+            parts=[SimpleNamespace(type="text", text="done ===LOOPFORGE_DONE===", synthetic=False)],
+        )
+    ]
+    session = _FakeSession(chat_result=SimpleNamespace(tokens={}, error=None), transcript=transcript)
+    hooks, _ = _recording_hooks()
+    result = _engine(session).run(
+        _agent(), goal_text="g", success_criteria=[], dataset_note="", prior_note="",
+        session=SimpleNamespace(workspace=tmp_path), hooks=hooks, max_turns=5,
+    )
+    assert result.finished is True
+    assert len(result.models) == 1 and result.models[0]["metric_value"] == 0.8
 
 
 def test_opencode_engine_surfaces_unreachable_server_as_failure():
@@ -391,3 +494,33 @@ def test_runtime_factory_wires_in_sandbox_launcher_when_sandbox_given():
     config, env = launched[0]
     assert config["permission"]["webfetch"] == "deny"
     assert set(env) <= {"OPENAI_API_KEY", "OPENAI_BASE_URL"}
+
+
+def test_opencode_uses_goal_resolved_provider_model_and_creds():
+    from api.loopforge.runtime import create_agent_engine
+    from api.loopforge.settings import AgentEngineMode, Settings
+
+    goal = SimpleNamespace(mode=GoalMode.OFFLINE_LOCAL)
+    # The provider the user configured on the Settings page (resolved by _llm_for_goal).
+    llm = SimpleNamespace(model="qwen2.5-coder", base_url="http://localhost:9001/v1", api_key="sk-goal")
+    launched: list = []
+
+    class _Sandbox:
+        def serve_opencode(self, session, *, config, env=None):
+            launched.append((config, env))
+            return OpencodeServerHandle(base_url="http://127.0.0.1:9", container_id="c", _stop=lambda: None)
+
+    engine = create_agent_engine(
+        Settings(agent_engine=AgentEngineMode.OPENCODE), llm=llm, goal=goal, sandbox=_Sandbox()
+    )
+    assert engine.model_id == "qwen2.5-coder"  # Settings model, not env opencode_model_id
+    engine.server_launcher(object())
+    config, env = launched[0]
+    assert config["model"] == "openai/qwen2.5-coder"
+    # the endpoint + model are registered so opencode accepts a non-catalog model
+    # and routes to the configured base URL (not opencode's built-in openai catalog).
+    assert config["provider"]["openai"]["options"]["baseURL"] == "http://localhost:9001/v1"
+    assert "qwen2.5-coder" in config["provider"]["openai"]["models"]
+    assert env["OPENAI_API_KEY"] == "sk-goal"
+    # loopback rewritten so the sandboxed container can reach the host-served model
+    assert env["OPENAI_BASE_URL"] == "http://host.docker.internal:9001/v1"

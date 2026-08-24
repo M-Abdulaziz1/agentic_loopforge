@@ -329,6 +329,57 @@ paths:
                 items: { $ref: "#/components/schemas/Artifact" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /api/runs/{runId}/files:
+    parameters:
+      - { name: runId, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: listRunFiles
+      summary: List files in the run's workspace directory
+      responses:
+        "200":
+          description: Files (empty if the run has no workspace)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    path: { type: string }
+                    size: { type: integer }
+                    category:
+                      type: string
+                      enum: [dataset, code, output, report, plot, other]
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/runs/{runId}/files/content:
+    parameters:
+      - { name: runId, in: path, required: true, schema: { type: string } }
+      - { name: path, in: query, required: true, schema: { type: string } }
+    get:
+      operationId: readRunFile
+      summary: Read one file from the run's workspace (path-traversal guarded)
+      responses:
+        "200":
+          description: File content — text, an image data URI, or binary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  path: { type: string }
+                  size: { type: integer }
+                  category:
+                    type: string
+                    enum: [dataset, code, output, report, plot, other]
+                  kind:
+                    type: string
+                    enum: [text, image, binary]
+                  content: { type: string, nullable: true }
+                  data_uri: { type: string, nullable: true }
+                  truncated: { type: boolean }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /api/runs/{runId}/results:
     parameters:
       - { name: runId, in: path, required: true, schema: { type: string } }
@@ -868,6 +919,8 @@ components:
         spent_usd:
           anyOf: [{ type: number }, { type: "null" }]
         result_summary:
+          anyOf: [{ type: string }, { type: "null" }]
+        workspace_path:
           anyOf: [{ type: string }, { type: "null" }]
         started_at:
           anyOf: [{ type: string, format: date-time }, { type: "null" }]

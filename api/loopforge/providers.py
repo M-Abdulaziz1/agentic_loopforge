@@ -203,6 +203,8 @@ class DockerGvisorSandboxProvider:
         command_runner=None,
         opencode_image: str | None = None,
         opencode_network: str = "loopforge-egress",
+        opencode_dns: str = "1.1.1.1",
+        opencode_memory: str = "2g",
         opencode_container_port: int = 4096,
         opencode_startup_timeout_seconds: float = 30.0,
         readiness_probe: Callable[[str], bool] | None = None,
@@ -219,15 +221,31 @@ class DockerGvisorSandboxProvider:
         # port, so it cannot use network=none (see docs/opencode.md).
         self.opencode_image = opencode_image or image
         self.opencode_network = opencode_network
+        self.opencode_dns = opencode_dns
+        self.opencode_memory = opencode_memory
         self.opencode_container_port = opencode_container_port
         self.opencode_startup_timeout_seconds = opencode_startup_timeout_seconds
         self.readiness_probe = readiness_probe or _default_opencode_readiness_probe
 
-    def open_session(self, *, dataset_mount: DatasetMount | dict[str, object] | None = None) -> SandboxSession:
+    def _new_workspace(self) -> Path:
         workspace = self.workspace_root / uuid4().hex
         workspace.mkdir(parents=True, exist_ok=False)
-        (workspace / "data").mkdir(parents=True, exist_ok=True)
-        (workspace / "output").mkdir(parents=True, exist_ok=True)
+        # The container runs non-root (uid 65532) but the host process creating this
+        # dir is a different uid; without this the sandbox can't write to /workspace
+        # (opencode's HOME/session data, agent output files). Ephemeral per-run dir.
+        # ponytail: 0777 on a throwaway per-run bind-mount; tighten to a fixed uid
+        # only if the host runs the API as root and can chown to 65532.
+        workspace.chmod(0o777)
+        # Subdirs must be writable by the non-root container uid too, else the agent
+        # can't save outputs (/workspace/output) — mkdir uses the host umask (0755).
+        for sub in ("data", "output"):
+            d = workspace / sub
+            d.mkdir(parents=True, exist_ok=True)
+            d.chmod(0o777)
+        return workspace
+
+    def open_session(self, *, dataset_mount: DatasetMount | dict[str, object] | None = None) -> SandboxSession:
+        workspace = self._new_workspace()
         mount = _normalize_dataset_mount(dataset_mount)
 
         def exec_python(ws: Path, code: str, timeout: int) -> SandboxResult:
@@ -236,9 +254,7 @@ class DockerGvisorSandboxProvider:
         return SandboxSession(workspace=workspace, exec_python=exec_python, dataset_mount=mount)
 
     def run_code(self, code: str, *, timeout_seconds: int, dataset_mount: DatasetMount | dict[str, object] | None = None) -> SandboxResult:
-        workspace = self.workspace_root / uuid4().hex
-        workspace.mkdir(parents=True, exist_ok=False)
-        (workspace / "data").mkdir(parents=True, exist_ok=True)
+        workspace = self._new_workspace()
         return self._run_in_workspace(
             workspace, code, timeout_seconds=timeout_seconds, mount=_normalize_dataset_mount(dataset_mount)
         )
@@ -304,6 +320,16 @@ class DockerGvisorSandboxProvider:
 
         workspace = session.workspace
         write_opencode_config(workspace, config)
+        # gVisor can't reach Docker Desktop's internal resolver on a custom bridge;
+        # give it a real nameserver via a bind-mounted resolv.conf. Empty = leave the
+        # container's default DNS (prod/Linux) untouched.
+        resolv_conf = None
+        if self.opencode_dns:
+            resolv_conf = workspace / ".resolv.conf"
+            resolv_conf.write_text(
+                "".join(f"nameserver {ns.strip()}\n" for ns in self.opencode_dns.split(",") if ns.strip()),
+                encoding="utf-8",
+            )
         host_port = _free_tcp_port()
         base_url = f"http://127.0.0.1:{host_port}"
 
@@ -313,6 +339,9 @@ class DockerGvisorSandboxProvider:
             "-d",
             f"--runtime={self.runtime}",
             f"--network={self.opencode_network}",
+            # Let the sandbox reach a host-served model endpoint on a custom bridge
+            # (host.docker.internal isn't auto-added off the default bridge).
+            "--add-host=host.docker.internal:host-gateway",
             "--read-only",
             "--security-opt=no-new-privileges",
             "--cap-drop=ALL",
@@ -320,12 +349,13 @@ class DockerGvisorSandboxProvider:
             "/tmp:rw,noexec,nosuid,size=64m",
             "--user",
             "65532:65532",
-            f"--memory={self.memory}",
+            f"--memory={self.opencode_memory}",
             f"--cpus={self.cpus}",
             "-p",
             f"127.0.0.1:{host_port}:{self.opencode_container_port}",
             "-v",
             f"{workspace}:/workspace:rw",
+            *(["-v", f"{resolv_conf}:/etc/resolv.conf:ro"] if resolv_conf is not None else []),
             # opencode needs a writable HOME/XDG under the sole writable mount, and
             # discovers opencode.json from the working directory.
             "-e",

@@ -337,6 +337,7 @@ class Run(BaseModel):
     spent_llm_calls: int = 0
     spent_usd: float | None = None
     result_summary: str | None = None
+    workspace_path: str | None = None  # host dir bind-mounted as /workspace; browsable per run
     started_at: datetime | None = None
     ended_at: datetime | None = None
 

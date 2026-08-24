@@ -35,6 +35,8 @@
 
   /* semantic (Vercel palette) */
   --ok: #0070f3; /* blue doubles as positive/active */
+  --ok-soft: #d6f5ea; /* 'done' chip fill */
+  --ok-ink: #0b6b50; /* 'done' chip text — legible on --ok-soft */
   --warn: #f5a623;
   --warning-deep: #ab570a;
   --bad: #ee0000;
@@ -78,6 +80,8 @@
   --ink-hover: #d4d4d4;
 
   --ok: #3291ff;
+  --ok-soft: rgba(70, 227, 173, 0.2);
+  --ok-ink: #bff5e3;
   --warn: #f5a623;
   --warning-deep: #f5b544;
   --bad: #ff6166;
@@ -220,6 +224,33 @@ h3 {
   background: linear-gradient(90deg, rgba(0, 112, 243, 0.15), var(--accent), rgba(0, 112, 243, 0.15));
   background-size: 200% 100%;
   animation: lf-shimmer 1.3s linear infinite;
+}
+
+/* React Flow ships light-theme chrome; repoint it at the design tokens so the
+   builder canvas matches the rest of the app in both themes. Its stylesheet is
+   imported by the lazy-loaded builder page, so it lands after this file —
+   hence the doubled class for specificity. */
+.react-flow .react-flow__edge-textbg {
+  fill: var(--glass2);
+}
+.react-flow .react-flow__edge-text {
+  fill: var(--ink2);
+  font-size: 10px;
+}
+.react-flow .react-flow__controls-button {
+  background: var(--glass2);
+  border-bottom: 1px solid var(--line);
+  fill: var(--ink2);
+}
+.react-flow .react-flow__controls-button:hover {
+  background: var(--glass);
+}
+.react-flow .react-flow__minimap {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.react-flow .react-flow__minimap-mask {
+  fill: var(--canvas-soft);
 }
 
 /* Keyboard focus ring — Vercel blue. */

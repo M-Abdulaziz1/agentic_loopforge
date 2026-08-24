@@ -63,6 +63,19 @@ export const handlers = [
   http.get("/api/runs/:runId/results", () => HttpResponse.json(sampleResults)),
   http.get("/api/runs/:runId/context", () => HttpResponse.json(sampleRunContext)),
   http.get("/api/runs/:runId/artifacts", () => HttpResponse.json([sampleArtifact])),
+  http.get("/api/runs/:runId/files", () =>
+    HttpResponse.json([{ path: "output/report.md", size: 42, category: "report" }]),
+  ),
+  http.get("/api/runs/:runId/files/content", () =>
+    HttpResponse.json({
+      path: "output/report.md",
+      category: "report",
+      kind: "text",
+      content: "# Report\nAll good.",
+      size: 42,
+      truncated: false,
+    }),
+  ),
   http.get("/api/artifacts/:artifactId/content", () =>
     HttpResponse.json(sampleArtifactContent),
   ),

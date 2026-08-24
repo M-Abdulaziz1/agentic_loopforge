@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 from pathlib import Path
 import re
@@ -62,7 +63,7 @@ from api.loopforge.runner import LoopRunner
 from api.loopforge.providers import DatasetMount, LLMProviderError
 from api.loopforge.runtime import create_agent_engine, create_execution_sandbox_provider, create_llm_provider, create_llm_provider_from_config
 from api.loopforge.secrets import SecretCipher
-from api.loopforge.settings import Settings
+from api.loopforge.settings import AgentEngineMode, Settings
 from api.loopforge.sqlite_store import SQLiteStore
 from api.loopforge.store import InMemoryStore, Store
 from api.loopforge.tools import default_tool_registry
@@ -538,6 +539,42 @@ def create_app(store: Store | None = None, settings: Settings | None = None) -> 
             raise HTTPException(status_code=404, detail="Run not found") from exc
         return [_sanitize_artifact(artifact) for artifact in store.list_artifacts(runId)]
 
+    @app.get("/api/runs/{runId}/files")
+    def list_run_files(runId: str) -> list[dict]:
+        root = _run_workspace(store, runId)
+        if root is None:
+            return []
+        entries: list[dict] = []
+        for path in sorted(root.rglob("*")):
+            if not path.is_file() or _is_noise_path(path.relative_to(root)):
+                continue
+            rel = str(path.relative_to(root))
+            entries.append({"path": rel, "size": path.stat().st_size, "category": _file_category(rel)})
+            if len(entries) >= 500:
+                break
+        return entries
+
+    @app.get("/api/runs/{runId}/files/content")
+    def read_run_file(runId: str, path: str) -> dict:
+        root = _run_workspace(store, runId)
+        if root is None:
+            raise HTTPException(status_code=404, detail="Run has no workspace")
+        target = (root / path).resolve()
+        if not target.is_relative_to(root.resolve()) or not target.is_file():
+            raise HTTPException(status_code=404, detail="File not found")
+        raw = target.read_bytes()
+        category = _file_category(path)
+        base = {"path": path, "size": len(raw), "category": category}
+        suffix = Path(path).suffix.lower()
+        if suffix in _IMAGE_SUFFIXES:  # render plots inline as a data URI
+            mime = "image/svg+xml" if suffix == ".svg" else f"image/{suffix.lstrip('.').replace('jpg', 'jpeg')}"
+            return {**base, "kind": "image", "data_uri": f"data:{mime};base64,{base64.b64encode(raw).decode()}"}
+        try:
+            content = raw[:_MAX_FILE_VIEW_BYTES].decode("utf-8")
+        except UnicodeDecodeError:
+            return {**base, "kind": "binary", "content": None}
+        return {**base, "kind": "text", "content": content, "truncated": len(raw) > _MAX_FILE_VIEW_BYTES}
+
     @app.get("/api/runs/{runId}/results")
     def get_results(runId: str) -> Results:
         try:
@@ -700,6 +737,54 @@ def _public_llm_provider(provider: StoredLLMProvider) -> LLMProviderView:
         has_api_key=provider.encrypted_api_key is not None,
         created_at=provider.created_at,
     )
+
+
+_MAX_FILE_VIEW_BYTES = 256 * 1024
+_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"}
+# Agent-runtime scaffolding that clutters the workspace but is not the user's work
+# product: opencode's own dirs/config, package caches, and hidden runtime state.
+_NOISE_DIRS = {".opencode-data", ".cache", ".npm", ".local", ".config", "opencode", "node_modules", "__pycache__"}
+_NOISE_FILES = {"opencode.json", ".resolv.conf", "package-lock.json"}
+
+
+def _is_noise_path(rel: Path) -> bool:
+    if any(part in _NOISE_DIRS for part in rel.parts):
+        return True
+    if rel.name in _NOISE_FILES:
+        return True
+    return rel.name.startswith(".")  # stray dotfiles
+
+
+def _file_category(rel_path: str) -> str:
+    """Classify a workspace file for grouping (dataset / code / output / report / plot)."""
+    p = Path(rel_path)
+    suffix = p.suffix.lower()
+    if suffix in _IMAGE_SUFFIXES:
+        return "plot"
+    top = p.parts[0] if p.parts else ""
+    if top == "data":
+        return "dataset"
+    if top == "output":
+        return "output"
+    if suffix in {".py", ".ipynb", ".sql", ".sh", ".r"}:
+        return "code"
+    if suffix in {".md", ".txt", ".rst"}:
+        return "report"
+    if suffix in {".json", ".csv", ".yaml", ".yml", ".pkl", ".joblib", ".parquet"}:
+        return "output"
+    return "other"
+
+
+def _run_workspace(store: Store, run_id: str) -> Path | None:
+    """The run's on-disk workspace dir, or None if it has none / no longer exists."""
+    try:
+        run = store.get_run(run_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Run not found") from exc
+    if not run.workspace_path:
+        return None
+    root = Path(run.workspace_path)
+    return root if root.is_dir() else None
 
 
 def _llm_for_goal(store: Store, settings: Settings, goal: Goal):
@@ -874,5 +959,40 @@ def _is_terminal(status: RunStatus) -> bool:
     }
 
 
+def _log_startup_settings(settings: Settings) -> None:
+    """Print the main resolved env params at boot so operators can confirm they applied."""
+
+    def mask(v: str) -> str:  # never print full secrets
+        return v[:3] + "…" if v else "(unset)"
+
+    lines = [
+        ("agent_engine", settings.agent_engine),
+        ("llm_provider", settings.llm_provider),
+        ("llm_base_url", settings.openai_compatible_base_url),
+        ("llm_model", settings.openai_compatible_model),
+        ("llm_api_key", mask(settings.openai_compatible_api_key)),
+        ("sandbox_provider", settings.sandbox_provider),
+        ("sandbox_image", settings.docker_sandbox_image),
+        ("sandbox_network", settings.docker_network),
+        ("gvisor_runtime", settings.docker_gvisor_runtime),
+        ("storage_path", settings.storage_path),
+        ("secret_key", mask(settings.secret_key)),
+    ]
+    if settings.agent_engine == AgentEngineMode.OPENCODE:
+        lines += [
+            ("opencode_model", f"{settings.opencode_provider_id}/{settings.opencode_model_id}"),
+            ("opencode_image", settings.docker_opencode_image),
+            ("opencode_network", settings.docker_opencode_network),
+        ]
+    width = max(len(k) for k, _ in lines)
+    print("─" * 52)
+    print("LoopForge config (resolved from env)")
+    print("─" * 52)
+    for key, value in lines:
+        print(f"  {key.ljust(width)}  {value}")
+    print("─" * 52, flush=True)
+
+
 _settings = Settings.from_env()
+_log_startup_settings(_settings)
 app = create_app(store=create_store(_settings), settings=_settings)

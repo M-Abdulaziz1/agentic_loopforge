@@ -5,7 +5,7 @@ import json
 from api.loopforge.agent_engine import AgentEngine, NativeReActEngine
 from api.loopforge.agent_loop import LoopHooks, LoopResult
 from api.loopforge.context import ContextManager
-from api.loopforge.domain import Artifact, ContextEntry, Evaluator, Gate, Goal, LoopSpec, Run, RunEvent, RunStatus, now_utc
+from api.loopforge.domain import Artifact, ContextEntry, Evaluator, Gate, Goal, LoopSpec, LoopSpecAgent, Run, RunEvent, RunStatus, now_utc
 from api.loopforge.evaluators import EvaluationCandidate, MlBaselineEvaluator, build_evaluator_provider
 from api.loopforge.providers import DatasetMount, LLMProvider, LLMResponse, SandboxProvider, SandboxProviderError, SandboxResult
 from api.loopforge.store import Store
@@ -71,11 +71,21 @@ class LoopRunner:
         return self._complete_execution(running, goal, spec, first_agent_started=True)
 
     def _complete_execution(self, run: Run, goal: Goal, spec: LoopSpec, *, first_agent_started: bool) -> Run:
+        # Engines that drive their own subagents (opencode) run the whole loop in ONE
+        # persistent session under the full budget — so collapse the spec's agents into a
+        # single lead rather than sequencing cold per-agent sessions that fragment the budget.
         agents = spec.agents
+        if getattr(self.agent_engine, "orchestrates_subagents", False) and agents:
+            agents = [_lead_agent(spec)]
         try:
             session = self.sandbox.open_session(dataset_mount=self.dataset_mount)
         except SandboxProviderError as exc:
             return self._fail_run(run, str(exc))
+        # Persist the run's workspace so its files are browsable after the run.
+        workspace_path = getattr(session, "workspace", None)
+        if workspace_path is not None:
+            run = run.model_copy(update={"workspace_path": str(workspace_path)})
+            self.store.save_run(run)
         evaluator_provider = build_evaluator_provider(self.evaluator, llm=self.llm, sandbox=self.sandbox)
         dataset_note = self._dataset_note()
 
@@ -114,16 +124,21 @@ class LoopRunner:
                 return self._budget_exhausted(run)
 
             hooks.build_context_pack = lambda agent_name=agent.name: build_context_pack(agent_name)
-            result = self.agent_engine.run(
-                agent=agent,
-                goal_text=goal.text,
-                success_criteria=spec.success_criteria,
-                dataset_note=dataset_note,
-                prior_note=prior_note,
-                session=session,
-                hooks=hooks,
-                max_turns=remaining,
-            )
+            try:
+                result = self.agent_engine.run(
+                    agent=agent,
+                    goal_text=goal.text,
+                    success_criteria=spec.success_criteria,
+                    dataset_note=dataset_note,
+                    prior_note=prior_note,
+                    session=session,
+                    hooks=hooks,
+                    max_turns=remaining,
+                )
+            except SandboxProviderError as exc:
+                # e.g. the opencode serve container failing to start. Surface an honest
+                # failure instead of letting it escape and strand the run in RUNNING.
+                return self._fail_run(run, f"Sandbox failed during {agent.name}: {exc}")
             ran_any_code = ran_any_code or result.ran_code
 
             if result.budget_exhausted:
@@ -237,6 +252,24 @@ class LoopRunner:
 
     def _event(self, run: Run, event_type: str, message: str, payload: dict[str, object] | None = None) -> None:
         self.store.append_event(RunEvent(run_id=run.id, seq=0, type=event_type, message=message, payload=payload or {}))
+
+
+def _lead_agent(spec: LoopSpec) -> LoopSpecAgent:
+    """One lead agent that owns the whole run, folding the spec's roles into its brief.
+
+    The concrete crew roles become the lead's plan; opencode spawns explorer/verifier
+    subagents itself via the `task` tool.
+    """
+    roles = "; ".join(f"{a.name} ({a.role})" for a in spec.agents)
+    base = spec.agents[0].system_prompt if spec.agents else ""
+    prompt = base
+    if roles:
+        prompt = (
+            f"{base}\n\nYou lead this run end to end and own every stage — "
+            f"{roles} — doing them yourself or by delegating to your subagents. "
+            "Do not stop until the goal's success criteria are met or the budget is spent."
+        )
+    return LoopSpecAgent(name=spec.agents[0].name if spec.agents else "Lead", role="lead engineer", system_prompt=prompt, tools=[])
 
 
 class _CountingContextCompactor:

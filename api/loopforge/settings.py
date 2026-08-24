@@ -2,8 +2,30 @@ from __future__ import annotations
 
 import os
 from enum import StrEnum
+from pathlib import Path
 
 from pydantic import BaseModel, Field
+
+
+def load_dotenv(path: str | os.PathLike[str] | None = None) -> None:
+    """Load a ``.env`` file into ``os.environ`` (real env vars take precedence).
+
+    A minimal KEY=VALUE reader — no dependency. Skips blank/comment lines, strips
+    an optional ``export`` prefix and surrounding quotes, and never overrides a
+    variable already set in the process environment.
+    """
+    env_path = Path(path or os.getenv("LOOPFORGE_ENV_FILE", ".env"))
+    if not env_path.is_file():
+        return
+    for raw in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.removeprefix("export ").partition("=")
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key:
+            os.environ.setdefault(key, value)
 
 
 class LLMProviderMode(StrEnum):
@@ -48,8 +70,19 @@ class Settings(BaseModel):
     # default — the operator creates it), never the open default bridge.
     docker_opencode_image: str = "loopforge/opencode-sandbox:latest"
     docker_opencode_network: str = "loopforge-egress"
+    # gVisor's netstack can't use Docker Desktop's internal resolver on a custom
+    # bridge, so the serve container gets a real nameserver via a bind-mounted
+    # resolv.conf. Comma-separated. Empty = don't override (prod/Linux default DNS);
+    # sovereign/air-gapped deployments point this at their internal resolver.
+    docker_opencode_dns: str = "1.1.1.1"
+    # opencode's Bun server + in-sandbox DS work (pandas/xgboost) needs more than the
+    # code-exec container's 512m; kept separate so raising it doesn't loosen that one.
+    docker_opencode_memory: str = "2g"
     opencode_container_port: int = 4096
     opencode_startup_timeout_seconds: float = Field(default=30.0, gt=0)
+    # ``session.chat`` blocks until the agent's whole turn finishes (minutes), so the
+    # client read timeout must cover a full run — the SDK's 60s default kills it.
+    opencode_request_timeout_seconds: float = Field(default=900.0, gt=0)
 
     @property
     def opencode_base_url(self) -> str:
@@ -57,6 +90,7 @@ class Settings(BaseModel):
 
     @classmethod
     def from_env(cls) -> "Settings":
+        load_dotenv()
         return cls(
             storage_path=os.getenv("LOOPFORGE_STORAGE_PATH", ".loopforge/loopforge.db"),
             dataset_storage_path=os.getenv("LOOPFORGE_DATASET_STORAGE_PATH", ".loopforge/datasets"),
@@ -82,6 +116,9 @@ class Settings(BaseModel):
             opencode_mode=os.getenv("LOOPFORGE_OPENCODE_MODE", "build"),
             docker_opencode_image=os.getenv("LOOPFORGE_DOCKER_OPENCODE_IMAGE", "loopforge/opencode-sandbox:latest"),
             docker_opencode_network=os.getenv("LOOPFORGE_DOCKER_OPENCODE_NETWORK", "loopforge-egress"),
+            docker_opencode_dns=os.getenv("LOOPFORGE_DOCKER_OPENCODE_DNS", "1.1.1.1"),
+            docker_opencode_memory=os.getenv("LOOPFORGE_DOCKER_OPENCODE_MEMORY", "2g"),
             opencode_container_port=int(os.getenv("LOOPFORGE_OPENCODE_CONTAINER_PORT", "4096")),
             opencode_startup_timeout_seconds=float(os.getenv("LOOPFORGE_OPENCODE_STARTUP_TIMEOUT_SECONDS", "30")),
+            opencode_request_timeout_seconds=float(os.getenv("LOOPFORGE_OPENCODE_REQUEST_TIMEOUT_SECONDS", "900")),
         )

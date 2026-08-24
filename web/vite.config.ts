@@ -6,9 +6,12 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
-    // Dev: forward API calls to Codex's backend (be/plan-2) — avoids CORS.
+    // Dev: forward API calls to the backend — avoids CORS.
     proxy: {
-      "/api": { target: "http://localhost:8000", changeOrigin: true },
+      "/api": {
+        target: process.env.LOOPFORGE_API_URL ?? "http://localhost:8000",
+        changeOrigin: true,
+      },
     },
   },
   test: {

@@ -5,6 +5,8 @@ from fastapi.testclient import TestClient
 from api.loopforge.app import create_app
 from api.loopforge import app as app_module
 from api.loopforge.providers import LLMResponse
+from api.loopforge.settings import Settings
+from api.loopforge.sqlite_store import SQLiteStore
 
 
 # Valid spec JSON so the real planner path produces a spec (no offline fallback).
@@ -23,10 +25,6 @@ class RecordingLLMProvider:
     def complete(self, *, system: str, prompt: str) -> LLMResponse:
         self.calls.append((system, prompt))
         return LLMResponse(text=_VALID_SPEC_JSON, tokens_used=1)
-
-
-from api.loopforge.settings import Settings
-from api.loopforge.sqlite_store import SQLiteStore
 
 
 def test_dataset_upload_profiles_masks_lists_gets_and_deletes_file(tmp_path) -> None:

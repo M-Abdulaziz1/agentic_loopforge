@@ -1,6 +1,43 @@
 from fastapi.testclient import TestClient
 
 from api.loopforge.app import create_app
+from api.loopforge.domain import Run, RunStatus
+from api.loopforge.store import InMemoryStore
+
+
+def test_run_files_list_categorizes_filters_noise_and_rejects_traversal(tmp_path) -> None:
+    ws = tmp_path / "ws"
+    (ws / "output").mkdir(parents=True)
+    (ws / "data").mkdir(parents=True)
+    (ws / ".cache" / "matplotlib").mkdir(parents=True)
+    (ws / "report.md").write_text("# Findings\nAll good.", encoding="utf-8")
+    (ws / "train.py").write_text("print(1)", encoding="utf-8")
+    (ws / "output" / "metrics.json").write_text("{}", encoding="utf-8")
+    (ws / "data" / "creditcard.csv").write_text("a,b\n1,2", encoding="utf-8")
+    (ws / ".cache" / "matplotlib" / "font.json").write_text("noise", encoding="utf-8")
+    (ws / "opencode.json").write_text("noise", encoding="utf-8")
+    (tmp_path / "secret.txt").write_text("SHOULD NOT BE READABLE", encoding="utf-8")
+
+    store = InMemoryStore()
+    run = store.save_run(Run(goal_id="g1", loop_spec_id="s1", status=RunStatus.COMPLETED, workspace_path=str(ws)))
+    client = TestClient(create_app(store=store))
+
+    files = client.get(f"/api/runs/{run.id}/files").json()
+    by_path = {f["path"]: f["category"] for f in files}
+    # noise filtered out
+    assert not any(".cache" in p or p == "opencode.json" for p in by_path)
+    # meaningful files present and categorized
+    assert by_path["train.py"] == "code"
+    assert by_path["output/metrics.json"] == "output"
+    assert by_path["data/creditcard.csv"] == "dataset"
+    assert by_path["report.md"] == "report"
+
+    content = client.get(f"/api/runs/{run.id}/files/content", params={"path": "report.md"}).json()
+    assert content["kind"] == "text" and content["content"] == "# Findings\nAll good."
+
+    # path traversal must not escape the workspace
+    escaped = client.get(f"/api/runs/{run.id}/files/content", params={"path": "../secret.txt"})
+    assert escaped.status_code == 404
 
 
 def test_goal_creation_returns_clarification_for_vague_goal() -> None:
